@@ -1,7 +1,8 @@
 /**
  * mottophoto - Video Export Engine
- * High-speed hardware-accelerated MP4 export via WebCodecs API + mp4-muxer.
- * Falls back to MediaRecorder if WebCodecs is not supported.
+ * Ultra-fast hardware-accelerated MP4 export via WebCodecs API + mp4-muxer.
+ * Features backpressure queue control and timeout guards to prevent freezing.
+ * Automatically falls back to MediaRecorder if WebCodecs is unsupported.
  */
 
 class VideoExporter {
@@ -56,7 +57,7 @@ class VideoExporter {
     // Reset UI
     this.percentEl.textContent = '0%';
     this.progressFill.style.width = '0%';
-    this.statusLabel.textContent = '超高速エンコードを準備しています...';
+    this.statusLabel.textContent = '高速エンコードの準備中...';
     this.btnCancel.style.display = 'inline-flex';
     this.btnDownload.style.display = 'none';
     this.btnClose.style.display = 'none';
@@ -78,12 +79,24 @@ class VideoExporter {
       } catch (err) {
         console.warn('WebCodecs export failed, falling back to MediaRecorder:', err);
         if (this.cancelRequested) return;
-        this.statusLabel.textContent = '通常録画モードに切り替えています...';
+        this.statusLabel.textContent = '通常録画モードに切り替えて継続しています...';
       }
     }
 
     // Fallback: Realtime MediaRecorder
     await this.exportWithMediaRecorder();
+  }
+
+  /**
+   * Helper: Flush encoder with timeout to prevent infinite hang
+   */
+  async flushWithTimeout(encoder, timeoutMs = 8000) {
+    return Promise.race([
+      encoder.flush(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Encoder flush timed out')), timeoutMs)
+      )
+    ]);
   }
 
   /**
@@ -97,7 +110,30 @@ class VideoExporter {
     const cw = slideshow.width;   // 1920
     const ch = slideshow.height;  // 1080
 
-    // 1. Prepare Audio (Decode BGM directly into memory if available)
+    // 1. Determine optimal Video Codec
+    const candidateCodecs = [
+      'avc1.640028', // H.264 High Profile 4.0
+      'avc1.4d002a', // H.264 Main Profile
+      'avc1.420028'  // H.264 Baseline Profile
+    ];
+    let chosenVideoCodec = 'avc1.4d002a';
+    for (const c of candidateCodecs) {
+      try {
+        const support = await VideoEncoder.isConfigSupported({
+          codec: c,
+          width: cw,
+          height: ch,
+          bitrate: 8_000_000,
+          framerate: fps
+        });
+        if (support.supported) {
+          chosenVideoCodec = c;
+          break;
+        }
+      } catch (e) {}
+    }
+
+    // 2. Prepare Audio (Decode BGM directly into memory if available)
     let audioBuffer = null;
     let hasAudio = false;
 
@@ -112,12 +148,22 @@ class VideoExporter {
           arrayBuffer = await res.arrayBuffer();
         }
 
-        if (arrayBuffer) {
+        if (arrayBuffer && typeof window.AudioEncoder === 'function') {
           const AudioContextClass = window.AudioContext || window.webkitAudioContext;
           const tempCtx = new AudioContextClass();
           audioBuffer = await tempCtx.decodeAudioData(arrayBuffer);
-          hasAudio = !!(audioBuffer && audioBuffer.numberOfChannels > 0);
           tempCtx.close().catch(() => {});
+
+          if (audioBuffer && audioBuffer.numberOfChannels > 0) {
+            // Verify AAC AudioEncoder support
+            const audioSupport = await AudioEncoder.isConfigSupported({
+              codec: 'mp4a.40.2',
+              numberOfChannels: audioBuffer.numberOfChannels,
+              sampleRate: audioBuffer.sampleRate,
+              bitrate: 192_000
+            });
+            hasAudio = !!audioSupport.supported;
+          }
         }
       } catch (e) {
         console.warn('Fast audio decode warning:', e);
@@ -127,7 +173,7 @@ class VideoExporter {
 
     if (this.cancelRequested) return;
 
-    // 2. Setup MP4 Muxer
+    // 3. Setup MP4 Muxer
     const muxerOptions = {
       target: new window.Mp4Muxer.ArrayBufferTarget(),
       video: {
@@ -136,7 +182,7 @@ class VideoExporter {
         height: ch
       },
       fastStart: 'in-memory',
-      firstTimestampBehavior: 'offset'
+      firstTimestampBehavior: 'strict'
     };
 
     if (hasAudio) {
@@ -149,10 +195,17 @@ class VideoExporter {
 
     const muxer = new window.Mp4Muxer.Muxer(muxerOptions);
 
-    // 3. Setup VideoEncoder (Apple Silicon / Hardware H.264 High Profile)
+    // 4. Setup VideoEncoder with error trapping
     let encoderError = null;
     const videoEncoder = new VideoEncoder({
-      output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+      output: (chunk, meta) => {
+        try {
+          muxer.addVideoChunk(chunk, meta);
+        } catch (e) {
+          console.error('Muxer addVideoChunk error:', e);
+          encoderError = e;
+        }
+      },
       error: (e) => {
         console.error('VideoEncoder error:', e);
         encoderError = e;
@@ -160,23 +213,29 @@ class VideoExporter {
     });
 
     videoEncoder.configure({
-      codec: 'avc1.640028', // H.264 High Profile Level 4.0
+      codec: chosenVideoCodec,
       width: cw,
       height: ch,
-      bitrate: 8_500_000,
+      bitrate: 8_000_000,
       framerate: fps
     });
 
-    // 4. Encode Audio Track in background (Instant: < 0.5s)
+    // 5. Setup AudioEncoder & Encode BGM (Fast: ~0.3s)
     let audioEncoder = null;
     if (hasAudio) {
       audioEncoder = new AudioEncoder({
-        output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+        output: (chunk, meta) => {
+          try {
+            muxer.addAudioChunk(chunk, meta);
+          } catch (e) {
+            console.error('Muxer addAudioChunk error:', e);
+          }
+        },
         error: (e) => console.error('AudioEncoder error:', e)
       });
 
       audioEncoder.configure({
-        codec: 'mp4a.40.2', // AAC-LC
+        codec: 'mp4a.40.2',
         numberOfChannels: audioBuffer.numberOfChannels,
         sampleRate: audioBuffer.sampleRate,
         bitrate: 192_000
@@ -211,25 +270,35 @@ class VideoExporter {
 
         audioEncoder.encode(audioData);
         audioData.close();
+
+        // Audio queue backpressure
+        while (audioEncoder.encodeQueueSize > 10) {
+          await new Promise(r => setTimeout(r, 2));
+        }
       }
 
-      await audioEncoder.flush();
+      await this.flushWithTimeout(audioEncoder, 5000);
     }
 
     if (this.cancelRequested || encoderError) {
       videoEncoder.close();
       if (audioEncoder) audioEncoder.close();
-      return;
+      throw encoderError || new Error('Cancelled');
     }
 
-    // 5. Offline Frame-by-Frame Video Rendering (Max CPU/GPU Speed)
+    // 6. Offline Frame-by-Frame Video Rendering with Backpressure
     const startTime = performance.now();
 
     for (let frameIdx = 0; frameIdx < totalFrames; frameIdx++) {
       if (this.cancelRequested || encoderError) {
         videoEncoder.close();
         if (audioEncoder) audioEncoder.close();
-        return;
+        throw encoderError || new Error('Cancelled');
+      }
+
+      // Backpressure: If hardware encoder queue is full, wait for it to process
+      while (videoEncoder.encodeQueueSize > 5) {
+        await new Promise(r => setTimeout(r, 4));
       }
 
       const frameTime = frameIdx / fps;
@@ -255,18 +324,21 @@ class VideoExporter {
         const fpsActual = Math.round((frameIdx + 1) / Math.max(0.1, elapsedSec));
         this.statusLabel.textContent = `🚀 高速エンコード中 (${fpsActual} fps)... ${frameIdx + 1} / ${totalFrames} コマ`;
 
-        // Yield to browser event loop
         await new Promise(r => setTimeout(r, 0));
       }
     }
 
     this.statusLabel.textContent = '✨ MP4ファイルを仕上げています...';
-    await videoEncoder.flush();
+
+    // Flush remaining frames with safe timeout
+    await this.flushWithTimeout(videoEncoder, 8000);
+
+    // Finalize MP4 box container
     muxer.finalize();
 
     if (this.cancelRequested) return;
 
-    // 6. Complete and provide download
+    // 7. Complete and provide download
     const { buffer } = muxer.target;
     this.exportBlob = new Blob([buffer], { type: 'video/mp4' });
     this.exportUrl = URL.createObjectURL(this.exportBlob);
