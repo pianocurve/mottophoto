@@ -358,6 +358,13 @@ class SlideshowEngine {
       this.drawSlideItem(ctx, nextItem, time);
       ctx.restore();
     }
+
+    // 16:9 実際の表示枠ガイド (微細なシネマフレーム境界)
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, w - 2, h - 2);
+    ctx.restore();
   }
 
   drawSlideItem(ctx, item, time) {
@@ -504,17 +511,26 @@ class SlideshowEngine {
     const imgRatio = img.width / img.height;
     const canvasRatio = cw / ch;
 
+    const fit = slide.fit ?? (motionMode === 'crossfade-only' ? 'contain' : 'cover');
+
     let baseW, baseH;
 
-    if (motionMode === 'crossfade-only') {
-      // クロスフェードのみの場合：縦画像も横画像も画面内に収まり、画面ギリギリではなく少し余白を設ける
+    if (fit === 'cover') {
+      // 枠いっぱい (Cover)
+      if (imgRatio > canvasRatio) {
+        baseH = ch;
+        baseW = ch * imgRatio;
+      } else {
+        baseW = cw;
+        baseH = cw / imgRatio;
+      }
+    } else {
+      // 全体表示 (Contain)
       if (photoBg === 'blur') {
         this.drawContainBackdrop(ctx, img, cw, ch);
       }
-      // photoBg === 'black' の時は背景を描画せず、すっきりと純粋な黒背景（#000000）のままにします
-
-      // 上下左右に約5%の適度な余白（90%枠）
-      const paddingRatio = 0.90;
+      // 余白枠 (92% safe frame)
+      const paddingRatio = 0.92;
       const availW = cw * paddingRatio;
       const availH = ch * paddingRatio;
       const availRatio = availW / availH;
@@ -525,28 +541,6 @@ class SlideshowEngine {
       } else {
         baseH = availH;
         baseW = availH * imgRatio;
-      }
-    } else {
-      // ケンバーンズモード時は現状通り（cover / 個別fit）
-      const fit = slide.fit ?? 'cover';
-      if (fit === 'cover') {
-        if (imgRatio > canvasRatio) {
-          baseH = ch;
-          baseW = ch * imgRatio;
-        } else {
-          baseW = cw;
-          baseH = cw / imgRatio;
-        }
-      } else {
-        // Contain
-        this.drawContainBackdrop(ctx, img, cw, ch);
-        if (imgRatio > canvasRatio) {
-          baseW = cw;
-          baseH = cw / imgRatio;
-        } else {
-          baseH = ch;
-          baseW = ch * imgRatio;
-        }
       }
     }
 

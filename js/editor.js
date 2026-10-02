@@ -123,11 +123,14 @@ class SlideEditor {
     this.currentSlideIndex = slideIndex;
     const slide = this.app.slides[slideIndex];
 
+    const motionMode = document.getElementById('selectEffectMotion')?.value || 'crossfade-only';
+    const defaultFit = motionMode === 'crossfade-only' ? 'contain' : 'cover';
+
     // Backup original state
     this.originalState = {
       brightness: slide.brightness ?? 100,
       zoom: slide.zoom ?? 100,
-      fit: slide.fit ?? 'cover',
+      fit: slide.fit ?? defaultFit,
       panX: slide.panX ?? 0,
       panY: slide.panY ?? 0
     };
@@ -173,23 +176,25 @@ class SlideEditor {
     if (!slide || !slide.img) return;
 
     const ctx = this.ctx;
-    const cw = this.canvas.width;
-    const ch = this.canvas.height;
+    const cw = this.canvas.width;  // 960 (16:9)
+    const ch = this.canvas.height; // 540 (16:9)
 
-    // Clear
+    // Clear canvas
     ctx.clearRect(0, 0, cw, ch);
-    ctx.fillStyle = '#0a0a0c';
+    ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, cw, ch);
-
-    // Apply brightness filter
-    ctx.filter = `brightness(${this.tempState.brightness}%)`;
 
     const img = slide.img;
     const imgRatio = img.width / img.height;
     const canvasRatio = cw / ch;
 
+    const motionMode = document.getElementById('selectEffectMotion')?.value || 'crossfade-only';
+    const photoBg = document.getElementById('selectPhotoBg')?.value || 'black';
+    const fit = this.tempState.fit || (motionMode === 'crossfade-only' ? 'contain' : 'cover');
+
     let baseW, baseH;
-    if (this.tempState.fit === 'cover') {
+    if (fit === 'cover') {
+      // 枠いっぱい (Cover)
       if (imgRatio > canvasRatio) {
         baseH = ch;
         baseW = ch * imgRatio;
@@ -198,13 +203,26 @@ class SlideEditor {
         baseH = cw / imgRatio;
       }
     } else {
-      // Contain
-      if (imgRatio > canvasRatio) {
-        baseW = cw;
-        baseH = cw / imgRatio;
+      // 全体表示 (Contain)
+      if (photoBg === 'blur') {
+        ctx.save();
+        ctx.filter = 'blur(24px) brightness(40%)';
+        ctx.drawImage(img, -20, -20, cw + 40, ch + 40);
+        ctx.restore();
+      }
+
+      // 92% safe frame (slideshow.js と同一計算)
+      const paddingRatio = 0.92;
+      const availW = cw * paddingRatio;
+      const availH = ch * paddingRatio;
+      const availRatio = availW / availH;
+
+      if (imgRatio > availRatio) {
+        baseW = availW;
+        baseH = availW / imgRatio;
       } else {
-        baseH = ch;
-        baseW = ch * imgRatio;
+        baseH = availH;
+        baseW = availH * imgRatio;
       }
     }
 
@@ -223,13 +241,78 @@ class SlideEditor {
     const drawX = centerX + panOffsetX;
     const drawY = centerY + panOffsetY;
 
-    ctx.drawImage(img, drawX, drawY, finalW, finalH);
-    ctx.filter = 'none';
+    // Apply brightness & render image
+    ctx.save();
+    ctx.filter = `brightness(${this.tempState.brightness}%)`;
 
-    // Draw gentle frame guide
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-    ctx.lineWidth = 1;
+    if (fit === 'contain' && photoBg === 'blur') {
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.65)';
+      ctx.shadowBlur = 24;
+      ctx.shadowOffsetY = 6;
+      ctx.drawImage(img, drawX, drawY, finalW, finalH);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(drawX, drawY, finalW, finalH);
+    } else {
+      ctx.drawImage(img, drawX, drawY, finalW, finalH);
+    }
+    ctx.restore();
+
+    // 16:9 実際の表示枠ガイド (Viewfinder Crop Marks & Outer Border)
+    ctx.save();
+
+    // 16:9外枠境界線
+    ctx.strokeStyle = 'rgba(99, 102, 241, 0.75)';
+    ctx.lineWidth = 2;
     ctx.strokeRect(1, 1, cw - 2, ch - 2);
+
+    // ビューファインダー風の四隅L字ガイド (Corner Guides)
+    ctx.strokeStyle = '#a5b4fc';
+    ctx.lineWidth = 3;
+    const cSize = 24;
+    // 左上
+    ctx.beginPath();
+    ctx.moveTo(12, 12 + cSize);
+    ctx.lineTo(12, 12);
+    ctx.lineTo(12 + cSize, 12);
+    ctx.stroke();
+    // 右上
+    ctx.beginPath();
+    ctx.moveTo(cw - 12 - cSize, 12);
+    ctx.lineTo(cw - 12, 12);
+    ctx.lineTo(cw - 12, 12 + cSize);
+    ctx.stroke();
+    // 左下
+    ctx.beginPath();
+    ctx.moveTo(12, ch - 12 - cSize);
+    ctx.lineTo(12, ch - 12);
+    ctx.lineTo(12 + cSize, ch - 12);
+    ctx.stroke();
+    // 右下
+    ctx.beginPath();
+    ctx.moveTo(cw - 12 - cSize, ch - 12);
+    ctx.lineTo(cw - 12, ch - 12);
+    ctx.lineTo(cw - 12, ch - 12 - cSize);
+    ctx.stroke();
+
+    // 全体表示 (Contain) 時は92%セーフエリア目安枠（点線）
+    if (fit === 'contain') {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      const pW = cw * 0.92;
+      const pH = ch * 0.92;
+      ctx.strokeRect((cw - pW) / 2, (ch - pH) / 2, pW, pH);
+      ctx.setLineDash([]);
+    }
+
+    // 表示枠ラベル
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+    ctx.font = '600 12px Inter, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('16:9 スライド出力枠', cw - 18, 28);
+
+    ctx.restore();
   }
 
   onDragStart(e) {

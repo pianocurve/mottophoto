@@ -220,7 +220,7 @@ class MottoPhotoApp {
           zoom: 100,
           panX: 0,
           panY: 0,
-          fit: 'cover'
+          fit: (document.getElementById('selectEffectMotion')?.value || 'crossfade-only') === 'crossfade-only' ? 'contain' : 'cover'
         });
       };
       img.src = url;

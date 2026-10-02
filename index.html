@@ -24,6 +24,7 @@
     <!-- Left: Cinema Player Card -->
     <div class="player-card">
       <div class="canvas-viewport" id="viewport">
+        <div class="screen-frame-badge" id="viewportFrameBadge">16:9 プレビュー枠</div>
         <canvas id="slideshowCanvas" width="1920" height="1080"></canvas>
         
         <!-- Empty Viewport Overlay -->
@@ -360,6 +361,7 @@
         <div class="editor-layout">
           <!-- Canvas Preview -->
           <div class="editor-canvas-wrap" id="editorCanvasWrap">
+            <div class="editor-frame-badge">16:9 出力表示枠</div>
             <canvas id="editorCanvas" width="960" height="540"></canvas>
             <div class="editor-tip">画像をドラッグして位置（トリム）を調整できます</div>
           </div>
