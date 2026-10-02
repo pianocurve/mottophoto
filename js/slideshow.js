@@ -89,15 +89,17 @@ class SlideshowEngine {
     let photoDuration = 3.5;
     let bgmDuration = null;
 
-    if (this.app.bgmAudio && this.app.bgmAudio.duration && !isNaN(this.app.bgmAudio.duration)) {
+    if (this.app.bgmAudio && this.app.bgmAudio.duration && !isNaN(this.app.bgmAudio.duration) && isFinite(this.app.bgmAudio.duration)) {
       bgmDuration = this.app.bgmAudio.duration;
     }
 
-    if (bgmDuration && N > 0) {
-      // Calculate photo duration so that: titleDuration + N * photoDuration + finDuration = bgmDuration
-      const remainingForPhotos = bgmDuration - titleDuration - finDuration;
-      photoDuration = Math.max(0.5, remainingForPhotos / N);
+    if (bgmDuration) {
       this.totalDuration = bgmDuration;
+      if (N > 0) {
+        // Calculate photo duration so that: titleDuration + N * photoDuration + finDuration = bgmDuration
+        const remainingForPhotos = bgmDuration - titleDuration - finDuration;
+        photoDuration = Math.max(0.5, remainingForPhotos / N);
+      }
     } else {
       photoDuration = 3.5;
       this.totalDuration = titleDuration + (N * photoDuration) + finDuration;
@@ -141,13 +143,16 @@ class SlideshowEngine {
     });
 
     // Update UI Indicators
-    document.getElementById('photoDurationLabel').textContent = `${photoDuration.toFixed(1)} 秒`;
-    if (bgmDuration) {
-      document.getElementById('timingBreakdownText').textContent = 
-        `BGM長さ(${this.formatTime(bgmDuration)}) に合わせ自動配分`;
-    } else {
-      document.getElementById('timingBreakdownText').textContent = 
-        `写真各 ${photoDuration.toFixed(1)} 秒 (BGM設定で自動計算)`;
+    const photoDurLabel = document.getElementById('photoDurationLabel');
+    if (photoDurLabel) photoDurLabel.textContent = `${photoDuration.toFixed(1)} 秒`;
+
+    const timingBreakdown = document.getElementById('timingBreakdownText');
+    if (timingBreakdown) {
+      if (bgmDuration) {
+        timingBreakdown.textContent = `BGM長さ(${this.formatTime(bgmDuration)}) に合わせ自動配分`;
+      } else {
+        timingBreakdown.textContent = `写真各 ${photoDuration.toFixed(1)} 秒 (BGM設定で自動計算)`;
+      }
     }
 
     this.updateStats();
@@ -159,18 +164,27 @@ class SlideshowEngine {
   }
 
   updateStats() {
-    const totalCount = this.app.slides.length;
-    document.getElementById('statPhotoCount').textContent = `${totalCount}枚`;
-    document.getElementById('badgeSlideCount').textContent = `${totalCount} 枚の写真`;
+    const totalCount = this.app.slides ? this.app.slides.length : 0;
+    const statPhotoCount = document.getElementById('statPhotoCount');
+    if (statPhotoCount) statPhotoCount.textContent = `${totalCount}枚`;
 
-    if (this.app.bgmAudio && this.app.bgmAudio.duration) {
-      document.getElementById('statBgmDuration').textContent = this.formatTime(this.app.bgmAudio.duration);
-    } else {
-      document.getElementById('statBgmDuration').textContent = '未設定';
+    const statBgmDuration = document.getElementById('statBgmDuration');
+    if (statBgmDuration) {
+      if (this.app.bgmAudio && this.app.bgmAudio.duration && !isNaN(this.app.bgmAudio.duration) && isFinite(this.app.bgmAudio.duration)) {
+        statBgmDuration.textContent = this.formatTime(this.app.bgmAudio.duration);
+      } else {
+        statBgmDuration.textContent = '未設定';
+      }
     }
 
-    document.getElementById('statTotalDuration').textContent = this.formatTime(this.totalDuration);
-    this.totalSlideNumber.textContent = `${this.timeline.length}スライド`;
+    const statTotalDuration = document.getElementById('statTotalDuration');
+    if (statTotalDuration) {
+      statTotalDuration.textContent = this.formatTime(this.totalDuration);
+    }
+
+    if (this.totalSlideNumber) {
+      this.totalSlideNumber.textContent = `${this.timeline.length}スライド`;
+    }
   }
 
   togglePlay() {

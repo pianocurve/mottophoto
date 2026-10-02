@@ -238,10 +238,12 @@ class MottoPhotoApp {
     this.bgmAudio.load();
 
     const onAudioReady = () => {
-      if (this.bgmAudio.duration && !isNaN(this.bgmAudio.duration)) {
+      if (this.bgmAudio.duration && !isNaN(this.bgmAudio.duration) && isFinite(this.bgmAudio.duration)) {
         this.bgmLoaded = true;
-        document.getElementById('audioFileName').textContent = file.name;
-        document.getElementById('audioDurationBadge').textContent = this.slideshow.formatTime(this.bgmAudio.duration);
+        const nameEl = document.getElementById('audioFileName');
+        if (nameEl) nameEl.textContent = file.name;
+        const badgeEl = document.getElementById('audioDurationBadge');
+        if (badgeEl) badgeEl.textContent = this.slideshow.formatTime(this.bgmAudio.duration);
         const btnRemove = document.getElementById('btnRemoveBgm');
         if (btnRemove) btnRemove.style.display = 'inline-flex';
         this.slideshow.recalculateTimeline();
@@ -249,8 +251,13 @@ class MottoPhotoApp {
     };
 
     this.bgmAudio.onloadedmetadata = onAudioReady;
+    this.bgmAudio.ondurationchange = onAudioReady;
     this.bgmAudio.oncanplay = onAudioReady;
     this.bgmAudio.onloadeddata = onAudioReady;
+
+    if (this.bgmAudio.readyState >= 1 && this.bgmAudio.duration && !isNaN(this.bgmAudio.duration)) {
+      onAudioReady();
+    }
   }
 
   removeBgm() {
