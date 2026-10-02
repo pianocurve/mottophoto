@@ -92,8 +92,8 @@ class SlideEditor {
       this.tempState.brightness = 100;
       this.tempState.zoom = 100;
       this.tempState.panX = 0;
-      this.tempState.panY = 0;
-      this.tempState.fit = 'cover';
+      const motionMode = document.getElementById('selectEffectMotion')?.value || 'crossfade-only';
+      this.tempState.fit = motionMode === 'crossfade-only' ? 'contain' : 'cover';
       this.updateControlUI();
       this.render();
     });

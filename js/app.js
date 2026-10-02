@@ -645,18 +645,36 @@ class MottoPhotoApp {
   }
 
   getSettingsObject() {
-    // Collect per-photo edit parameters keyed by filename
+    const motionMode = document.getElementById('selectEffectMotion')?.value ?? 'crossfade-only';
+    const defaultFit = motionMode === 'crossfade-only' ? 'contain' : 'cover';
+
+    // 変更（明るさ・ズーム・トリム・フィット）があった画像のみをファイル名キーで抽出して保存
     const photoEdits = {};
     if (this.slides && this.slides.length > 0) {
-      this.slides.forEach((s, idx) => {
-        if (s.name) {
+      this.slides.forEach(s => {
+        if (!s.name) return;
+        const brightness = s.brightness ?? 100;
+        const zoom = s.zoom ?? 100;
+        const panX = s.panX ?? 0;
+        const panY = s.panY ?? 0;
+        const fit = s.fit ?? defaultFit;
+
+        // デフォルト（初期値）から変更されているか判定
+        const isModified = (
+          brightness !== 100 ||
+          zoom !== 100 ||
+          panX !== 0 ||
+          panY !== 0 ||
+          fit !== defaultFit
+        );
+
+        if (isModified) {
           photoEdits[s.name] = {
-            brightness: s.brightness ?? 100,
-            zoom: s.zoom ?? 100,
-            panX: s.panX ?? 0,
-            panY: s.panY ?? 0,
-            fit: s.fit ?? 'contain',
-            order: idx
+            brightness,
+            zoom,
+            panX,
+            panY,
+            fit
           };
         }
       });
@@ -797,6 +815,8 @@ class MottoPhotoApp {
   saveSettingsToLocalStorage() {
     try {
       const settings = this.getSettingsObject();
+      this.savedPhotoEdits = settings.photoEdits;
+      this.savedSlideOrder = settings.slideOrder;
       localStorage.setItem('mottophoto_project_settings', JSON.stringify(settings));
     } catch (e) {
       console.warn('LocalStorage save failed:', e);
@@ -840,7 +860,7 @@ class MottoPhotoApp {
         const editCount = settings.photoEdits ? Object.keys(settings.photoEdits).length : 0;
         let msg = '設定ファイルを正常に読み込みました！';
         if (editCount > 0) {
-          msg += `\n（${editCount}枚の画像編集パラメータを適用・保持しました）`;
+          msg += `\n（変更のあった画像 ${editCount}枚 の個別パラメータを適用・保持しました）`;
         }
         if (settings.bgmFileName) {
           msg += `\n※設定されていたBGM: ${settings.bgmFileName}`;
