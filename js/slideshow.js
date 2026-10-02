@@ -523,7 +523,8 @@ class SlideshowEngine {
       slide.zoom,
       slide.panX,
       slide.panY,
-      fit
+      fit,
+      slide.cropRatio || 'original'
     );
 
     let dX = b.drawX;

@@ -1147,6 +1147,37 @@ body {
   font-size: 0.72rem;
 }
 
+.editor-controls #selectCropRatio {
+  background: rgba(15, 23, 42, 0.95);
+  color: #f1f5f9;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 5px 6px;
+  font-size: 0.74rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+.editor-controls #selectCropRatio:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.editor-controls #btnToggleCropOrientation {
+  padding: 5px 8px;
+  font-size: 0.72rem;
+  background: rgba(30, 41, 59, 0.9);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.editor-controls #btnToggleCropOrientation:hover {
+  background: var(--accent-primary);
+  color: #fff;
+  border-color: var(--accent-primary);
+}
+
 .editor-controls #btnResetEditorValues {
   padding: 5px 8px;
   font-size: 0.74rem;

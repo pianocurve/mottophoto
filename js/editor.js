@@ -31,6 +31,9 @@ class SlideEditor {
     this.btnFitContain = document.getElementById('btnFitContain');
     this.btnReset = document.getElementById('btnResetEditorValues');
 
+    this.selectCropRatio = document.getElementById('selectCropRatio');
+    this.btnToggleCropOrientation = document.getElementById('btnToggleCropOrientation');
+
     this.btnPrev = document.getElementById('btnEditorPrevSlide');
     this.btnNext = document.getElementById('btnEditorNextSlide');
     this.btnApply = document.getElementById('btnEditorApply');
@@ -94,31 +97,54 @@ class SlideEditor {
 
   /**
    * Calculate the fixed photo frame and the inner zoomed/panned draw bounds.
-   * - Photo frame (frameX, frameY, frameW, frameH) maintains original aspect ratio and maximum screen size.
+   * - Photo frame (frameX, frameY, frameW, frameH) maintains original or selected crop aspect ratio.
    * - Zoom & Pan occur STRICTLY within this frame (clipped to frame bounds).
+   * - Allows cropping landscape photos into portrait frames and portrait photos into landscape frames seamlessly!
    */
-  static getFrameAndDrawBounds(img, cw, ch, zoom = 100, panX = 0, panY = 0, fit = 'contain') {
+  static getFrameAndDrawBounds(img, cw, ch, zoom = 100, panX = 0, panY = 0, fit = 'contain', cropRatio = 'original') {
     const imgW = img.width || 1920;
     const imgH = img.height || 1080;
     const imgRatio = imgW / imgH;
     const screenRatio = cw / ch;
 
+    // 枠のアスペクト比 (targetRatio) を決定
+    let targetRatio;
+    if (!cropRatio || cropRatio === 'original') {
+      targetRatio = imgRatio;
+    } else if (cropRatio === 'inverted') {
+      targetRatio = 1 / imgRatio;
+    } else if (cropRatio === '16:9') {
+      targetRatio = 16 / 9;
+    } else if (cropRatio === '4:3') {
+      targetRatio = 4 / 3;
+    } else if (cropRatio === '1:1') {
+      targetRatio = 1.0;
+    } else if (cropRatio === '3:4') {
+      targetRatio = 3 / 4;
+    } else if (cropRatio === '9:16') {
+      targetRatio = 9 / 16;
+    } else if (typeof cropRatio === 'number' && cropRatio > 0) {
+      targetRatio = cropRatio;
+    } else {
+      targetRatio = imgRatio;
+    }
+
     let frameX, frameY, frameW, frameH;
 
-    if (fit === 'cover') {
+    if (fit === 'cover' && Math.abs(targetRatio - screenRatio) < 0.01) {
       // 画面全体に枠を取る場合 (16:9 Full Screen Frame)
       frameX = 0;
       frameY = 0;
       frameW = cw;
       frameH = ch;
     } else {
-      // 16:9 スクリーン上に元画像本来の比率で画面いっぱいまでフィットする最大枠 (100% full frame)
-      if (imgRatio > screenRatio) {
+      // 16:9 スクリーン上に比率を維持して画面いっぱいまでフィットする最大枠
+      if (targetRatio > screenRatio) {
         frameW = cw;
-        frameH = cw / imgRatio;
+        frameH = cw / targetRatio;
       } else {
         frameH = ch;
-        frameW = ch * imgRatio;
+        frameW = ch * targetRatio;
       }
       frameX = (cw - frameW) / 2;
       frameY = (ch - frameH) / 2;
@@ -128,19 +154,18 @@ class SlideEditor {
     const scale = Math.max(1.0, Math.min(3.0, (zoom || 100) / 100));
 
     // 枠に対する写真の描画サイズ
+    // 枠の内側に隙間（空白）が出ないよう、枠を元画像で完全に覆う (Cover)
     let baseW, baseH;
-    if (fit === 'cover') {
-      if (imgRatio > screenRatio) {
-        baseH = frameH;
-        baseW = frameH * imgRatio;
-      } else {
-        baseW = frameW;
-        baseH = frameW / imgRatio;
-      }
-    } else {
-      // contain: 基本サイズは枠サイズと完全に一致
-      baseW = frameW;
+    if (imgRatio > targetRatio) {
+      // 元画像の方が枠よりも横長（例: 横画像を縦枠や正方形で切り抜く場合）
+      // 縦を枠に合わせ、横をはみ出させて左右パンスライドを可能にする
       baseH = frameH;
+      baseW = frameH * imgRatio;
+    } else {
+      // 元画像の方が枠よりも縦長（例: 縦画像を横枠や正方形で切り抜く場合）
+      // 横を枠に合わせ、縦をはみ出させて上下パンスライドを可能にする
+      baseW = frameW;
+      baseH = frameW / imgRatio;
     }
 
     const drawW = baseW * scale;
@@ -176,7 +201,9 @@ class SlideEditor {
       drawW,
       drawH,
       maxPanX,
-      maxPanY
+      maxPanY,
+      targetRatio,
+      imgRatio
     };
   }
 
@@ -221,10 +248,65 @@ class SlideEditor {
       this.render();
     });
 
+    // Crop Aspect Ratio selection
+    if (this.selectCropRatio) {
+      this.selectCropRatio.addEventListener('change', (e) => {
+        this.tempState.cropRatio = e.target.value;
+        this.tempState.panX = 0;
+        this.tempState.panY = 0;
+        this.panXSlider.value = 0;
+        this.panXVal.textContent = '0%';
+        this.panYSlider.value = 0;
+        this.panYVal.textContent = '0%';
+        this.render();
+      });
+    }
+
+    // Toggle crop orientation (Landscape <-> Portrait)
+    if (this.btnToggleCropOrientation) {
+      this.btnToggleCropOrientation.addEventListener('click', () => {
+        const current = this.tempState.cropRatio || 'original';
+        const slide = this.app.slides[this.currentSlideIndex];
+        const img = slide?.img;
+        const imgRatio = (img?.width || 1920) / (img?.height || 1080);
+
+        let nextRatio;
+        if (current === 'original') {
+          // 元画像が横長なら縦長(3:4)へ、縦長なら横長(4:3)へ反転
+          nextRatio = imgRatio >= 1 ? '3:4' : '4:3';
+        } else if (current === '16:9') {
+          nextRatio = '9:16';
+        } else if (current === '9:16') {
+          nextRatio = '16:9';
+        } else if (current === '4:3') {
+          nextRatio = '3:4';
+        } else if (current === '3:4') {
+          nextRatio = '4:3';
+        } else if (current === '1:1') {
+          nextRatio = imgRatio >= 1 ? '3:4' : '4:3';
+        } else {
+          nextRatio = 'original';
+        }
+
+        this.tempState.cropRatio = nextRatio;
+        if (this.selectCropRatio) {
+          this.selectCropRatio.value = nextRatio;
+        }
+        this.tempState.panX = 0;
+        this.tempState.panY = 0;
+        this.panXSlider.value = 0;
+        this.panXVal.textContent = '0%';
+        this.panYSlider.value = 0;
+        this.panYVal.textContent = '0%';
+        this.render();
+      });
+    }
+
     // Reset button
     this.btnReset.addEventListener('click', () => {
       this.tempState.brightness = 100;
       this.tempState.zoom = 100;
+      this.tempState.cropRatio = 'original';
       this.tempState.panX = 0;
       this.tempState.panY = 0;
       const motionMode = document.getElementById('selectEffectMotion')?.value || 'crossfade-only';
@@ -267,6 +349,7 @@ class SlideEditor {
     this.originalState = {
       brightness: slide.brightness ?? 100,
       zoom: Math.max(100, slide.zoom ?? 100),
+      cropRatio: slide.cropRatio ?? 'original',
       fit: slide.fit ?? defaultFit,
       panX: slide.panX ?? 0,
       panY: slide.panY ?? 0
@@ -302,12 +385,27 @@ class SlideEditor {
     this.panYSlider.value = this.tempState.panY;
     this.panYVal.textContent = `${this.tempState.panY}%`;
 
+    if (this.selectCropRatio) {
+      this.selectCropRatio.value = this.tempState.cropRatio || 'original';
+    }
+
     if (this.tempState.fit === 'cover') {
       this.btnFitCover.classList.add('active');
       this.btnFitContain.classList.remove('active');
     } else {
       this.btnFitCover.classList.remove('active');
       this.btnFitContain.classList.add('active');
+    }
+  }
+
+  getCropRatioLabel(ratio) {
+    switch (ratio) {
+      case '16:9': return '16:9 (横ワイド)';
+      case '4:3': return '4:3 (横標準)';
+      case '1:1': return '1:1 (正方形)';
+      case '3:4': return '3:4 (縦標準)';
+      case '9:16': return '9:16 (縦スマホ)';
+      default: return '元画像比率';
     }
   }
 
@@ -337,7 +435,7 @@ class SlideEditor {
       ctx.restore();
     }
 
-    // 元画像の比率を維持した固定枠と、その内側のズーム描画座標を算出
+    // 元画像または指定された比率を維持した固定枠と、その内側のズーム描画座標を算出
     const b = SlideEditor.getFrameAndDrawBounds(
       img,
       cw,
@@ -345,7 +443,8 @@ class SlideEditor {
       this.tempState.zoom,
       this.tempState.panX,
       this.tempState.panY,
-      fit
+      fit,
+      this.tempState.cropRatio || 'original'
     );
     this.currentFrame = b;
 
@@ -417,12 +516,13 @@ class SlideEditor {
     // 枠情報バッジ
     const badgeY = b.frameY > 26 ? b.frameY - 24 : b.frameY + 8;
     ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-    ctx.fillRect(b.frameX, badgeY, 160, 20);
+    ctx.fillRect(b.frameX, badgeY, 180, 20);
     ctx.fillStyle = '#c7d2fe';
     ctx.font = '600 11px -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`元画像枠 (${Math.round(b.frameW)}×${Math.round(b.frameH)})`, b.frameX + 80, badgeY + 10);
+    const ratioLabel = this.getCropRatioLabel(this.tempState.cropRatio || 'original');
+    ctx.fillText(`${ratioLabel} (${Math.round(b.frameW)}×${Math.round(b.frameH)})`, b.frameX + 90, badgeY + 10);
 
     ctx.restore();
 
@@ -433,7 +533,7 @@ class SlideEditor {
 
     const badgeEl = document.getElementById('editorFrameBadge');
     if (badgeEl) {
-      badgeEl.textContent = fit === 'contain' ? '元画像の枠サイズ維持 (枠内ズーム)' : '全画面枠 (Cover)';
+      badgeEl.textContent = `切り抜き枠: ${ratioLabel}`;
     }
   }
 
@@ -513,6 +613,7 @@ class SlideEditor {
       const slide = this.app.slides[this.currentSlideIndex];
       slide.brightness = this.tempState.brightness;
       slide.zoom = Math.max(100, this.tempState.zoom);
+      slide.cropRatio = this.tempState.cropRatio || 'original';
       slide.fit = this.tempState.fit;
       slide.panX = this.tempState.panX;
       slide.panY = this.tempState.panY;

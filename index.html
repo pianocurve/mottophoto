@@ -381,6 +381,26 @@
               <input type="range" id="editorZoomSlider" class="form-range" min="100" max="300" step="1" value="100">
             </div>
 
+            <!-- Crop Aspect Ratio (Horizontal <-> Vertical Trimming) -->
+            <div class="form-group">
+              <div class="form-label">
+                <span>📐 切り抜き比率 (アスペクト比)</span>
+              </div>
+              <div style="display: flex; gap: 4px; align-items: center;">
+                <select id="selectCropRatio" class="form-select" style="flex: 1; padding: 4px 6px; font-size: 0.74rem; background: rgba(15, 23, 42, 0.9); color: #fff; border: 1px solid var(--border-light); border-radius: var(--radius-sm);">
+                  <option value="original">📷 元画像比率</option>
+                  <option value="16:9">↔ 16:9 (横ワイド)</option>
+                  <option value="4:3">↔ 4:3 (横標準)</option>
+                  <option value="1:1">⏹ 1:1 (正方形)</option>
+                  <option value="3:4">↕ 3:4 (縦標準)</option>
+                  <option value="9:16">↕ 9:16 (縦スマホ)</option>
+                </select>
+                <button type="button" class="btn btn-secondary" id="btnToggleCropOrientation" title="縦枠/横枠を素早く反転" style="padding: 4px 6px; font-size: 0.72rem; white-space: nowrap;">
+                  🔄 縦横反転
+                </button>
+              </div>
+            </div>
+
             <!-- Fit Mode -->
             <div class="form-group">
               <div class="form-label">表示フィット方式</div>

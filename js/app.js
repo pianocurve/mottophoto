@@ -664,6 +664,7 @@ class MottoPhotoApp {
         const panX = s.panX ?? 0;
         const panY = s.panY ?? 0;
         const fit = s.fit ?? defaultFit;
+        const cropRatio = s.cropRatio ?? 'original';
 
         // デフォルト（初期値）から変更されているか判定
         const isModified = (
@@ -671,13 +672,15 @@ class MottoPhotoApp {
           zoom !== 100 ||
           panX !== 0 ||
           panY !== 0 ||
-          fit !== defaultFit
+          fit !== defaultFit ||
+          cropRatio !== 'original'
         );
 
         if (isModified) {
           photoEdits[s.name] = {
             brightness,
             zoom,
+            cropRatio,
             panX,
             panY,
             fit
@@ -788,6 +791,7 @@ class MottoPhotoApp {
           if (edit) {
             if (edit.brightness !== undefined) slide.brightness = edit.brightness;
             if (edit.zoom !== undefined) slide.zoom = edit.zoom;
+            if (edit.cropRatio !== undefined) slide.cropRatio = edit.cropRatio;
             if (edit.panX !== undefined) slide.panX = edit.panX;
             if (edit.panY !== undefined) slide.panY = edit.panY;
             if (edit.fit !== undefined) slide.fit = edit.fit;
