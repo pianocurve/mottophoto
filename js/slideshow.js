@@ -587,7 +587,7 @@ class SlideshowEngine {
     if (showCaption) {
       const caption = this.getCaptionFromFileName(slide.name);
       if (caption) {
-        this.drawPhotoCaption(ctx, caption, drawX, drawY, finalW, finalH, motionMode, cw, ch);
+        this.drawPhotoCaption(ctx, caption, b.frameX, b.frameY, b.frameW, b.frameH, motionMode, cw, ch);
       }
     }
 
