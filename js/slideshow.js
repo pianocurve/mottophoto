@@ -358,13 +358,6 @@ class SlideshowEngine {
       this.drawSlideItem(ctx, nextItem, time);
       ctx.restore();
     }
-
-    // 16:9 実際の表示枠ガイド (微細なシネマフレーム境界)
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(1, 1, w - 2, h - 2);
-    ctx.restore();
   }
 
   drawSlideItem(ctx, item, time) {

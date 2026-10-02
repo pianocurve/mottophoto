@@ -306,12 +306,6 @@ class SlideEditor {
       ctx.setLineDash([]);
     }
 
-    // 表示枠ラベル
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
-    ctx.font = '600 12px Inter, sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillText('16:9 スライド出力枠', cw - 18, 28);
-
     ctx.restore();
   }
 
