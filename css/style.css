@@ -949,30 +949,56 @@ body {
   background: rgba(15, 23, 42, 0.8);
 }
 
-/* Image Editor Modal Specifics */
-.editor-layout {
-  display: grid;
-  grid-template-columns: 1fr 300px;
-  gap: 20px;
+/* Image Editor Modal Specifics (Enlarged 4:3 aspect ratio) */
+.modal-dialog.editor-dialog {
+  max-width: 1040px;
+  width: 92vw;
+  height: min(88vh, 780px); /* 1040 / 780 ≈ 4:3 比率 */
+  aspect-ratio: 4 / 3;
 }
 
-@media (max-width: 768px) {
+@media (max-aspect-ratio: 4/3) {
+  .modal-dialog.editor-dialog {
+    width: min(94vw, 1040px);
+    height: auto;
+    max-height: 90vh;
+  }
+}
+
+.editor-dialog .modal-body {
+  flex: 1;
+  min-height: 0;
+  padding: 20px 24px;
+}
+
+.editor-layout {
+  display: grid;
+  grid-template-columns: 1fr 310px;
+  gap: 20px;
+  height: 100%;
+  min-height: 0;
+}
+
+@media (max-width: 820px) {
   .editor-layout {
     grid-template-columns: 1fr;
+    overflow-y: auto;
   }
 }
 
 .editor-canvas-wrap {
-  background: #000;
+  background: #05080f;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-light);
   position: relative;
   overflow: hidden;
-  aspect-ratio: 16 / 9;
+  height: 100%;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: grab;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.6);
 }
 .editor-canvas-wrap:active {
   cursor: grabbing;
@@ -981,26 +1007,33 @@ body {
 #editorCanvas {
   max-width: 100%;
   max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
   display: block;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.7);
 }
 
 .editor-tip {
   position: absolute;
-  bottom: 10px;
-  left: 10px;
-  background: rgba(0, 0, 0, 0.7);
+  bottom: 12px;
+  left: 12px;
+  background: rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(4px);
-  padding: 4px 10px;
+  padding: 5px 12px;
   border-radius: var(--radius-full);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
   pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .editor-controls {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .segmented-control {
