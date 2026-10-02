@@ -506,81 +506,77 @@ class SlideshowEngine {
 
     const fit = slide.fit ?? (motionMode === 'crossfade-only' ? 'contain' : 'cover');
 
-    if (fit === 'cover') {
-      const crop = SlideEditor.getCropRect(img, slide.zoom, slide.panX, slide.panY, 'cover');
+    if (fit === 'contain' && photoBg === 'blur') {
+      this.drawContainBackdrop(ctx, img, cw, ch);
+    }
 
-      let cX = crop.cropX;
-      let cY = crop.cropY;
-      let cW = crop.cropW;
-      let cH = crop.cropH;
+    const b = SlideEditor.getFrameAndDrawBounds(
+      img,
+      cw,
+      ch,
+      slide.zoom,
+      slide.panX,
+      slide.panY,
+      fit
+    );
 
-      if (motionMode === 'kenburns') {
-        // 微細なモーション（元画像の境界からはみ出さないよう微小なズーム・パン）
-        const mode = item.photoIndex % 4;
-        let mScale = 1.0;
-        let mDx = 0;
-        let mDy = 0;
-        if (mode === 0) {
-          mScale = 1.0 + progress * 0.05;
-          mDx = (progress - 0.5) * (cW * 0.025);
-        } else if (mode === 1) {
-          mScale = 1.05 - progress * 0.05;
-          mDx = (0.5 - progress) * (cW * 0.025);
-        } else if (mode === 2) {
-          mScale = 1.0 + progress * 0.04;
-          mDy = (progress - 0.5) * (cH * 0.025);
-        } else {
-          mScale = 1.04 - progress * 0.04;
-          mDy = (0.5 - progress) * (cH * 0.025);
-        }
+    let dX = b.drawX;
+    let dY = b.drawY;
+    let dW = b.drawW;
+    let dH = b.drawH;
 
-        const animW = cW / mScale;
-        const animH = cH / mScale;
-        let animX = cX + (cW - animW) / 2 + mDx;
-        let animY = cY + (cH - animH) / 2 + mDy;
-
-        // クランプ（元画像の境界から外れない）
-        animX = Math.max(0, Math.min(img.width - animW, animX));
-        animY = Math.max(0, Math.min(img.height - animH, animY));
-
-        ctx.drawImage(img, animX, animY, animW, animH, 0, 0, cw, ch);
+    if (motionMode === 'kenburns') {
+      const mode = item.photoIndex % 4;
+      let mScale = 1.0;
+      let mDx = 0;
+      let mDy = 0;
+      if (mode === 0) {
+        mScale = 1.0 + progress * 0.05;
+        mDx = (progress - 0.5) * (dW * 0.02);
+      } else if (mode === 1) {
+        mScale = 1.05 - progress * 0.05;
+        mDx = (0.5 - progress) * (dW * 0.02);
+      } else if (mode === 2) {
+        mScale = 1.0 + progress * 0.04;
+        mDy = (progress - 0.5) * (dH * 0.02);
       } else {
-        // 静止画（クロスフェードのみ）: エディターで指定したクロップ領域を100%忠実に描画
-        ctx.drawImage(img, cX, cY, cW, cH, 0, 0, cw, ch);
-      }
-    } else {
-      // 全体表示 (Contain)
-      if (photoBg === 'blur') {
-        this.drawContainBackdrop(ctx, img, cw, ch);
-      }
-      const paddingRatio = 0.92;
-      const availW = cw * paddingRatio;
-      const availH = ch * paddingRatio;
-      const availRatio = availW / availH;
-
-      let baseW, baseH;
-      if (imgRatio > availRatio) {
-        baseW = availW;
-        baseH = availW / imgRatio;
-      } else {
-        baseH = availH;
-        baseW = availH * imgRatio;
+        mScale = 1.04 - progress * 0.04;
+        mDy = (0.5 - progress) * (dH * 0.02);
       }
 
-      const drawX = (cw - baseW) / 2;
-      const drawY = (ch - baseH) / 2;
+      const animW = dW * mScale;
+      const animH = dH * mScale;
+      let animX = dX + (dW - animW) / 2 + mDx;
+      let animY = dY + (dH - animH) / 2 + mDy;
 
+      // 枠内に隙間ができないようクランプ
+      if (animX > b.frameX) animX = b.frameX;
+      if (animX + animW < b.frameX + b.frameW) animX = b.frameX + b.frameW - animW;
+      if (animY > b.frameY) animY = b.frameY;
+      if (animY + animH < b.frameY + b.frameH) animY = b.frameY + b.frameH - animH;
+
+      dX = animX;
+      dY = animY;
+      dW = animW;
+      dH = animH;
+    }
+
+    ctx.save();
+    // 写真の固定枠でクリッピング（枠の外側へは絶対にはみ出さない）
+    ctx.beginPath();
+    ctx.rect(b.frameX, b.frameY, b.frameW, b.frameH);
+    ctx.clip();
+
+    ctx.drawImage(img, dX, dY, dW, dH);
+    ctx.restore();
+
+    // 枠のスタイリング（ブラー背景またはContain時の上品な枠線）
+    if (fit === 'contain') {
       ctx.save();
       if (photoBg === 'blur') {
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.65)';
-        ctx.shadowBlur = 32;
-        ctx.shadowOffsetY = 10;
-        ctx.drawImage(img, drawX, drawY, baseW, baseH);
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
         ctx.lineWidth = 2;
-        ctx.strokeRect(drawX, drawY, baseW, baseH);
-      } else {
-        ctx.drawImage(img, drawX, drawY, baseW, baseH);
+        ctx.strokeRect(b.frameX, b.frameY, b.frameW, b.frameH);
       }
       ctx.restore();
     }

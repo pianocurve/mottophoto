@@ -1,7 +1,7 @@
 /**
  * mottophoto - Slide Image Editor
- * Allows adjusting brightness, zoom/scale, and pan/trim with interactive dragging
- * Ensures the 16:9 crop area NEVER overflows the original image boundaries.
+ * Maintains the original photo frame (aspect ratio & size) within the 16:9 screen,
+ * and allows zooming / trimming strictly INSIDE that photo frame without overflowing.
  */
 
 class SlideEditor {
@@ -44,66 +44,101 @@ class SlideEditor {
     this.panStartX = 0;
     this.panStartY = 0;
 
-    // Cached rendered image layout for mouse interaction
-    this.currentImgLayout = null;
+    // Cached frame bounds
+    this.currentFrame = null;
 
     this.initEvents();
   }
 
   /**
-   * Calculate 16:9 crop rectangle (cropX, cropY, cropW, cropH) strictly within original image bounds.
-   * Guaranteed never to overflow outside the image boundaries.
+   * Calculate the fixed photo frame and the inner zoomed/panned draw bounds.
+   * - Photo frame (frameX, frameY, frameW, frameH) maintains original aspect ratio and fixed screen size.
+   * - Zoom & Pan occur STRICTLY within this frame (clipped to frame bounds).
    */
-  static getCropRect(img, zoom = 100, panX = 0, panY = 0, fit = 'cover') {
+  static getFrameAndDrawBounds(img, cw, ch, zoom = 100, panX = 0, panY = 0, fit = 'contain') {
     const imgW = img.width || 1920;
     const imgH = img.height || 1080;
     const imgRatio = imgW / imgH;
-    const targetRatio = 16 / 9;
+    const screenRatio = cw / ch;
 
-    // 最小ズームは100%（元画像の内側に最大で収まる16:9枠）。100%未満（縮小による余白発生）を防止
-    const safeZoom = Math.max(100, Math.min(300, zoom || 100));
-    const scale = safeZoom / 100;
+    let frameX, frameY, frameW, frameH;
 
-    let baseCropW, baseCropH;
-    if (imgRatio >= targetRatio) {
-      // 横長画像：高さ100%が最大基準
-      baseCropH = imgH;
-      baseCropW = imgH * targetRatio;
+    if (fit === 'cover') {
+      // 画面全体に枠を取る場合 (16:9 Full Screen Frame)
+      frameX = 0;
+      frameY = 0;
+      frameW = cw;
+      frameH = ch;
     } else {
-      // 縦長画像：幅100%が最大基準
-      baseCropW = imgW;
-      baseCropH = imgW / targetRatio;
+      // 16:9 スクリーン上に元画像本来の比率でポツンと配置される枠 (92% safe frame)
+      const paddingRatio = 0.90;
+      const availW = cw * paddingRatio;
+      const availH = ch * paddingRatio;
+
+      if (imgRatio > availW / availH) {
+        frameW = availW;
+        frameH = availW / imgRatio;
+      } else {
+        frameH = availH;
+        frameW = availH * imgRatio;
+      }
+      frameX = (cw - frameW) / 2;
+      frameY = (ch - frameH) / 2;
     }
 
-    // 拡大（ズーム）するほど切り抜く矩形サイズは小さくなる
-    const cropW = baseCropW / scale;
-    const cropH = baseCropH / scale;
+    // ズーム（最低100% = 枠ぴったり。100%〜300%で枠の内側をズーム）
+    const scale = Math.max(1.0, Math.min(3.0, (zoom || 100) / 100));
 
-    // 元画像の境界内にとどまるための最大移動許容量 (px)
-    const maxOffsetX = Math.max(0, (imgW - cropW) / 2);
-    const maxOffsetY = Math.max(0, (imgH - cropH) / 2);
+    // 枠に対する写真の描画サイズ
+    let baseW, baseH;
+    if (fit === 'cover') {
+      if (imgRatio > screenRatio) {
+        baseH = frameH;
+        baseW = frameH * imgRatio;
+      } else {
+        baseW = frameW;
+        baseH = frameW / imgRatio;
+      }
+    } else {
+      // contain: 基本サイズは枠サイズと完全に一致
+      baseW = frameW;
+      baseH = frameH;
+    }
 
-    // panX, panY (-100 ~ +100) を最大移動許容量にスケーリング
+    const drawW = baseW * scale;
+    const drawH = baseH * scale;
+
+    // 枠の内側で移動できる最大量 (px)
+    const maxPanX = Math.max(0, (drawW - frameW) / 2);
+    const maxPanY = Math.max(0, (drawH - frameH) / 2);
+
     const clampedPanX = Math.max(-100, Math.min(100, panX || 0));
     const clampedPanY = Math.max(-100, Math.min(100, panY || 0));
 
-    const offsetX = (clampedPanX / 100) * maxOffsetX;
-    const offsetY = (clampedPanY / 100) * maxOffsetY;
+    const offsetPanX = (clampedPanX / 100) * maxPanX;
+    const offsetPanY = (clampedPanY / 100) * maxPanY;
 
-    let cropX = (imgW - cropW) / 2 + offsetX;
-    let cropY = (imgH - cropH) / 2 + offsetY;
+    // 描画起点 (枠の中央を基準にオフセット)
+    let drawX = frameX + (frameW - drawW) / 2 + offsetPanX;
+    let drawY = frameY + (frameH - drawH) / 2 + offsetPanY;
 
-    // 元画像の境界線から絶対にはみ出さないよう厳密クランプ
-    cropX = Math.max(0, Math.min(imgW - cropW, cropX));
-    cropY = Math.max(0, Math.min(imgH - cropH, cropY));
+    // 枠の外側に隙間（空白）が出ないようクランプ
+    if (drawX > frameX) drawX = frameX;
+    if (drawX + drawW < frameX + frameW) drawX = frameX + frameW - drawW;
+    if (drawY > frameY) drawY = frameY;
+    if (drawY + drawH < frameY + frameH) drawY = frameY + frameH - drawH;
 
     return {
-      cropX,
-      cropY,
-      cropW,
-      cropH,
-      maxOffsetX,
-      maxOffsetY
+      frameX,
+      frameY,
+      frameW,
+      frameH,
+      drawX,
+      drawY,
+      drawW,
+      drawH,
+      maxPanX,
+      maxPanY
     };
   }
 
@@ -160,12 +195,12 @@ class SlideEditor {
       this.render();
     });
 
-    // Drag on Canvas to Pan Crop Window
+    // Drag on Canvas to Pan within frame
     this.canvas.addEventListener('mousedown', (e) => this.onDragStart(e));
     window.addEventListener('mousemove', (e) => this.onDragMove(e));
     window.addEventListener('mouseup', () => this.onDragEnd());
 
-    // Mouse wheel to zoom (scale crop window)
+    // Mouse wheel to zoom inside frame
     this.canvas.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
 
     // Navigation buttons inside modal
@@ -191,7 +226,6 @@ class SlideEditor {
     const motionMode = document.getElementById('selectEffectMotion')?.value || 'crossfade-only';
     const defaultFit = motionMode === 'crossfade-only' ? 'contain' : 'cover';
 
-    // Backup original state (zoom ensures at least 100%)
     this.originalState = {
       brightness: slide.brightness ?? 100,
       zoom: Math.max(100, slide.zoom ?? 100),
@@ -200,11 +234,10 @@ class SlideEditor {
       panY: slide.panY ?? 0
     };
 
-    // Current working state
     this.tempState = { ...this.originalState };
 
     this.updateControlUI();
-    this.titleEl.textContent = `写真 #${slideIndex + 1} のトリミング＆画像編集 (${slide.name})`;
+    this.titleEl.textContent = `写真 #${slideIndex + 1} の枠内ズーム＆トリム (${slide.name})`;
 
     this.btnPrev.disabled = slideIndex === 0;
     this.btnNext.disabled = slideIndex === this.app.slides.length - 1;
@@ -244,217 +277,120 @@ class SlideEditor {
     const cw = this.canvas.width;  // 960 (16:9)
     const ch = this.canvas.height; // 540 (16:9)
 
-    // Clear background
+    // Clear 16:9 screen
     ctx.clearRect(0, 0, cw, ch);
-    ctx.fillStyle = '#0a0d14';
+    ctx.fillStyle = '#07090e';
     ctx.fillRect(0, 0, cw, ch);
 
     const img = slide.img;
-    const imgW = img.width;
-    const imgH = img.height;
-    const imgRatio = imgW / imgH;
+    const photoBg = document.getElementById('selectPhotoBg')?.value || 'black';
+    const fit = this.tempState.fit || 'contain';
 
-    const fit = this.tempState.fit || 'cover';
-
-    if (fit === 'cover') {
-      // 1. 元画像の全体をキャンバス内に収めて表示 (周囲にパディング 28px)
-      const pad = 28;
-      const availW = cw - pad * 2;
-      const availH = ch - pad * 2;
-
-      let imgDrawW, imgDrawH;
-      if (imgRatio > availW / availH) {
-        imgDrawW = availW;
-        imgDrawH = availW / imgRatio;
-      } else {
-        imgDrawH = availH;
-        imgDrawW = availH * imgRatio;
-      }
-      const imgDrawX = (cw - imgDrawW) / 2;
-      const imgDrawY = (ch - imgDrawH) / 2;
-
-      this.currentImgLayout = {
-        imgDrawX,
-        imgDrawY,
-        imgDrawW,
-        imgDrawH,
-        imgW,
-        imgH
-      };
-
-      // 元画像を描画 (明るさフィルタ適用)
+    // 背景がブラーの場合、16:9画面全体に背景を描画
+    if (fit === 'contain' && photoBg === 'blur') {
       ctx.save();
-      ctx.filter = `brightness(${this.tempState.brightness}%)`;
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
-      ctx.shadowBlur = 24;
-      ctx.shadowOffsetY = 6;
-      ctx.drawImage(img, imgDrawX, imgDrawY, imgDrawW, imgDrawH);
+      ctx.filter = 'blur(24px) brightness(40%)';
+      ctx.drawImage(img, -20, -20, cw + 40, ch + 40);
       ctx.restore();
+    }
 
-      // 元画像の輪郭線 (写真本来の外枠境界)
-      ctx.save();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(imgDrawX, imgDrawY, imgDrawW, imgDrawH);
+    // 元画像の比率を維持した固定枠と、その内側のズーム描画座標を算出
+    const b = SlideEditor.getFrameAndDrawBounds(
+      img,
+      cw,
+      ch,
+      this.tempState.zoom,
+      this.tempState.panX,
+      this.tempState.panY,
+      fit
+    );
+    this.currentFrame = b;
 
-      // 元画像の情報バッジ (左上)
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-      ctx.fillRect(imgDrawX + 6, imgDrawY + 6, 120, 22);
-      ctx.fillStyle = '#cbd5e1';
-      ctx.font = '600 11px -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(`元画像: ${imgW}×${imgH}px`, imgDrawX + 12, imgDrawY + 17);
-      ctx.restore();
+    // 1. 元画像の枠（フレーム）の外側にはみ出さないようクリッピング設定
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(b.frameX, b.frameY, b.frameW, b.frameH);
+    ctx.clip();
 
-      // 2. 厳密な 16:9 トリム矩形を計算 (元画像の外側へは絶対にはみ出さない)
-      const crop = SlideEditor.getCropRect(img, this.tempState.zoom, this.tempState.panX, this.tempState.panY, 'cover');
+    // 2. 枠の内側にズームした写真を描画（明るさフィルタ適用）
+    ctx.filter = `brightness(${this.tempState.brightness}%)`;
+    ctx.drawImage(img, b.drawX, b.drawY, b.drawW, b.drawH);
+    ctx.restore();
 
-      // キャンバス上の表示座標へ変換
-      const scaleRatio = imgDrawW / imgW;
-      const boxX = imgDrawX + crop.cropX * scaleRatio;
-      const boxY = imgDrawY + crop.cropY * scaleRatio;
-      const boxW = crop.cropW * scaleRatio;
-      const boxH = crop.cropH * scaleRatio;
+    // 3. 元画像の枠線（写真本来の固定枠）を美しく表示
+    ctx.save();
+    ctx.strokeStyle = '#6366f1';
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = 'rgba(99, 102, 241, 0.4)';
+    ctx.shadowBlur = 12;
+    ctx.strokeRect(b.frameX, b.frameY, b.frameW, b.frameH);
+    ctx.shadowBlur = 0;
 
-      // 3. トリム枠の外側（元画像のうち切り抜かれない部分）を暗転マスク
-      ctx.save();
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.62)';
+    // 構図三分割線（3x3 ルール）を枠内に薄く表示
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(b.frameX + b.frameW / 3, b.frameY);
+    ctx.lineTo(b.frameX + b.frameW / 3, b.frameY + b.frameH);
+    ctx.moveTo(b.frameX + (b.frameW * 2) / 3, b.frameY);
+    ctx.lineTo(b.frameX + (b.frameW * 2) / 3, b.frameY + b.frameH);
+    ctx.moveTo(b.frameX, b.frameY + b.frameH / 3);
+    ctx.lineTo(b.frameX + b.frameW, b.frameY + b.frameH / 3);
+    ctx.moveTo(b.frameX, b.frameY + (b.frameH * 2) / 3);
+    ctx.lineTo(b.frameX + b.frameW, b.frameY + (b.frameH * 2) / 3);
+    ctx.stroke();
+    ctx.setLineDash([]);
 
-      // 上側の暗転マスク
-      if (boxY > imgDrawY) {
-        ctx.fillRect(imgDrawX, imgDrawY, imgDrawW, boxY - imgDrawY);
-      }
-      // 下側の暗転マスク
-      if (boxY + boxH < imgDrawY + imgDrawH) {
-        ctx.fillRect(imgDrawX, boxY + boxH, imgDrawW, (imgDrawY + imgDrawH) - (boxY + boxH));
-      }
-      // 左側の暗転マスク
-      if (boxX > imgDrawX) {
-        ctx.fillRect(imgDrawX, boxY, boxX - imgDrawX, boxH);
-      }
-      // 右側の暗転マスク
-      if (boxX + boxW < imgDrawX + imgDrawW) {
-        ctx.fillRect(boxX + boxW, boxY, (imgDrawX + imgDrawW) - (boxX + boxW), boxH);
-      }
-      ctx.restore();
+    // 四隅のL字ハンドル
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 3;
+    const hLen = Math.max(12, Math.min(24, Math.min(b.frameW, b.frameH) * 0.15));
+    // 左上
+    ctx.beginPath();
+    ctx.moveTo(b.frameX, b.frameY + hLen);
+    ctx.lineTo(b.frameX, b.frameY);
+    ctx.lineTo(b.frameX + hLen, b.frameY);
+    ctx.stroke();
+    // 右上
+    ctx.beginPath();
+    ctx.moveTo(b.frameX + b.frameW - hLen, b.frameY);
+    ctx.lineTo(b.frameX + b.frameW, b.frameY);
+    ctx.lineTo(b.frameX + b.frameW, b.frameY + hLen);
+    ctx.stroke();
+    // 左下
+    ctx.beginPath();
+    ctx.moveTo(b.frameX, b.frameY + b.frameH - hLen);
+    ctx.lineTo(b.frameX, b.frameY + b.frameH);
+    ctx.lineTo(b.frameX + hLen, b.frameY + b.frameH);
+    ctx.stroke();
+    // 右下
+    ctx.beginPath();
+    ctx.moveTo(b.frameX + b.frameW - hLen, b.frameY + b.frameH);
+    ctx.lineTo(b.frameX + b.frameW, b.frameY + b.frameH);
+    ctx.lineTo(b.frameX + b.frameW, b.frameY + b.frameH - hLen);
+    ctx.stroke();
 
-      // 4. 16:9 トリム枠（境界線、ガイド、四隅ハンドル）
-      ctx.save();
-      // 外枠線
-      ctx.strokeStyle = '#6366f1';
-      ctx.lineWidth = 2.5;
-      ctx.shadowColor = 'rgba(99, 102, 241, 0.5)';
-      ctx.shadowBlur = 10;
-      ctx.strokeRect(boxX, boxY, boxW, boxH);
-      ctx.shadowBlur = 0;
+    // 枠情報バッジ
+    const badgeY = b.frameY > 26 ? b.frameY - 24 : b.frameY + 8;
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+    ctx.fillRect(b.frameX, badgeY, 160, 20);
+    ctx.fillStyle = '#c7d2fe';
+    ctx.font = '600 11px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`元画像枠 (${Math.round(b.frameW)}×${Math.round(b.frameH)})`, b.frameX + 80, badgeY + 10);
 
-      // 三分割ルール線（構図ガイド）
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      // 縦2本
-      ctx.moveTo(boxX + boxW / 3, boxY);
-      ctx.lineTo(boxX + boxW / 3, boxY + boxH);
-      ctx.moveTo(boxX + (boxW * 2) / 3, boxY);
-      ctx.lineTo(boxX + (boxW * 2) / 3, boxY + boxH);
-      // 横2本
-      ctx.moveTo(boxX, boxY + boxH / 3);
-      ctx.lineTo(boxX + boxW, boxY + boxH / 3);
-      ctx.moveTo(boxX, boxY + (boxH * 2) / 3);
-      ctx.lineTo(boxX + boxW, boxY + (boxH * 2) / 3);
-      ctx.stroke();
-      ctx.setLineDash([]);
+    ctx.restore();
 
-      // 四隅の L字 ハンドル
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 3.5;
-      const hLen = Math.max(12, Math.min(24, Math.min(boxW, boxH) * 0.18));
-      // 左上
-      ctx.beginPath();
-      ctx.moveTo(boxX, boxY + hLen);
-      ctx.lineTo(boxX, boxY);
-      ctx.lineTo(boxX + hLen, boxY);
-      ctx.stroke();
-      // 右上
-      ctx.beginPath();
-      ctx.moveTo(boxX + boxW - hLen, boxY);
-      ctx.lineTo(boxX + boxW, boxY);
-      ctx.lineTo(boxX + boxW, boxY + hLen);
-      ctx.stroke();
-      // 左下
-      ctx.beginPath();
-      ctx.moveTo(boxX, boxY + boxH - hLen);
-      ctx.lineTo(boxX, boxY + boxH);
-      ctx.lineTo(boxX + hLen, boxY + boxH);
-      ctx.stroke();
-      // 右下
-      ctx.beginPath();
-      ctx.moveTo(boxX + boxW - hLen, boxY + boxH);
-      ctx.lineTo(boxX + boxW, boxY + boxH);
-      ctx.lineTo(boxX + boxW, boxY + boxH - hLen);
-      ctx.stroke();
+    // 16:9 出力境界線
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(1, 1, cw - 2, ch - 2);
 
-      // トリム枠バッジ
-      const badgeY = boxY > 26 ? boxY - 24 : boxY + 6;
-      ctx.fillStyle = '#6366f1';
-      ctx.fillRect(boxX, badgeY, 114, 20);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '700 11px -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('16:9 出力トリム枠', boxX + 57, badgeY + 10);
-
-      ctx.restore();
-
-      const badgeEl = document.getElementById('editorFrameBadge');
-      if (badgeEl) badgeEl.textContent = '元画像と 16:9 トリム枠';
-
-    } else {
-      // 5. 全体表示 (Contain) モード
-      this.currentImgLayout = null;
-      const photoBg = document.getElementById('selectPhotoBg')?.value || 'black';
-
-      if (photoBg === 'blur') {
-        ctx.save();
-        ctx.filter = 'blur(24px) brightness(40%)';
-        ctx.drawImage(img, -20, -20, cw + 40, ch + 40);
-        ctx.restore();
-      }
-
-      const paddingRatio = 0.92;
-      const availW = cw * paddingRatio;
-      const availH = ch * paddingRatio;
-      let baseW, baseH;
-      if (imgRatio > availW / availH) {
-        baseW = availW;
-        baseH = availW / imgRatio;
-      } else {
-        baseH = availH;
-        baseW = availH * imgRatio;
-      }
-
-      const drawX = (cw - baseW) / 2;
-      const drawY = (ch - baseH) / 2;
-
-      ctx.save();
-      ctx.filter = `brightness(${this.tempState.brightness}%)`;
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
-      ctx.shadowBlur = 24;
-      ctx.drawImage(img, drawX, drawY, baseW, baseH);
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(drawX, drawY, baseW, baseH);
-      ctx.restore();
-
-      // 16:9 境界ガイド
-      ctx.strokeStyle = 'rgba(99, 102, 241, 0.75)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(1, 1, cw - 2, ch - 2);
-
-      const badgeEl = document.getElementById('editorFrameBadge');
-      if (badgeEl) badgeEl.textContent = '全体表示 (余白あり)';
+    const badgeEl = document.getElementById('editorFrameBadge');
+    if (badgeEl) {
+      badgeEl.textContent = fit === 'contain' ? '元画像の枠サイズ維持 (枠内ズーム)' : '全画面枠 (Cover)';
     }
   }
 
@@ -468,46 +404,35 @@ class SlideEditor {
   }
 
   onDragMove(e) {
-    if (!this.isDragging) return;
-    const slide = this.app.slides[this.currentSlideIndex];
-    if (!slide || !slide.img) return;
-
+    if (!this.isDragging || !this.currentFrame) return;
     const dx = e.clientX - this.dragStartX;
     const dy = e.clientY - this.dragStartY;
+    const b = this.currentFrame;
 
-    if (this.tempState.fit === 'cover' && this.currentImgLayout) {
-      const { imgDrawW, imgDrawH, imgW, imgH } = this.currentImgLayout;
-      const crop = SlideEditor.getCropRect(slide.img, this.tempState.zoom, this.panStartX, this.panStartY, 'cover');
+    let newPanX = this.panStartX;
+    let newPanY = this.panStartY;
 
-      // トリム枠をマウスの移動方向に追従（元画像のピクセル系へ換算）
-      let newPanX = this.panStartX;
-      let newPanY = this.panStartY;
-
-      if (crop.maxOffsetX > 0) {
-        // キャンバス上の移動量を元画像の移動可能比率に変換
-        const deltaPx = dx * (imgW / imgDrawW);
-        const deltaPercent = (deltaPx / crop.maxOffsetX) * 100;
-        newPanX = Math.round(this.panStartX + deltaPercent);
-        newPanX = Math.max(-100, Math.min(100, newPanX));
-      }
-
-      if (crop.maxOffsetY > 0) {
-        const deltaPy = dy * (imgH / imgDrawH);
-        const deltaPercent = (deltaPy / crop.maxOffsetY) * 100;
-        newPanY = Math.round(this.panStartY + deltaPercent);
-        newPanY = Math.max(-100, Math.min(100, newPanY));
-      }
-
-      this.tempState.panX = newPanX;
-      this.tempState.panY = newPanY;
-
-      this.panXSlider.value = newPanX;
-      this.panXVal.textContent = `${newPanX}%`;
-      this.panYSlider.value = newPanY;
-      this.panYVal.textContent = `${newPanY}%`;
-
-      this.render();
+    if (b.maxPanX > 0) {
+      const deltaPercent = (dx / b.maxPanX) * 100;
+      newPanX = Math.round(this.panStartX + deltaPercent);
+      newPanX = Math.max(-100, Math.min(100, newPanX));
     }
+
+    if (b.maxPanY > 0) {
+      const deltaPercent = (dy / b.maxPanY) * 100;
+      newPanY = Math.round(this.panStartY + deltaPercent);
+      newPanY = Math.max(-100, Math.min(100, newPanY));
+    }
+
+    this.tempState.panX = newPanX;
+    this.tempState.panY = newPanY;
+
+    this.panXSlider.value = newPanX;
+    this.panXVal.textContent = `${newPanX}%`;
+    this.panYSlider.value = newPanY;
+    this.panYVal.textContent = `${newPanY}%`;
+
+    this.render();
   }
 
   onDragEnd() {
@@ -516,7 +441,6 @@ class SlideEditor {
 
   onWheel(e) {
     e.preventDefault();
-    if (this.tempState.fit !== 'cover') return;
     const delta = e.deltaY < 0 ? 5 : -5;
     const newZoom = Math.max(100, Math.min(300, this.tempState.zoom + delta));
     if (newZoom !== this.tempState.zoom) {
