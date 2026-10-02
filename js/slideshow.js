@@ -506,28 +506,59 @@ class SlideshowEngine {
 
     const fit = slide.fit ?? (motionMode === 'crossfade-only' ? 'contain' : 'cover');
 
-    let baseW, baseH;
-
     if (fit === 'cover') {
-      // 枠いっぱい (Cover)
-      if (imgRatio > canvasRatio) {
-        baseH = ch;
-        baseW = ch * imgRatio;
+      const crop = SlideEditor.getCropRect(img, slide.zoom, slide.panX, slide.panY, 'cover');
+
+      let cX = crop.cropX;
+      let cY = crop.cropY;
+      let cW = crop.cropW;
+      let cH = crop.cropH;
+
+      if (motionMode === 'kenburns') {
+        // 微細なモーション（元画像の境界からはみ出さないよう微小なズーム・パン）
+        const mode = item.photoIndex % 4;
+        let mScale = 1.0;
+        let mDx = 0;
+        let mDy = 0;
+        if (mode === 0) {
+          mScale = 1.0 + progress * 0.05;
+          mDx = (progress - 0.5) * (cW * 0.025);
+        } else if (mode === 1) {
+          mScale = 1.05 - progress * 0.05;
+          mDx = (0.5 - progress) * (cW * 0.025);
+        } else if (mode === 2) {
+          mScale = 1.0 + progress * 0.04;
+          mDy = (progress - 0.5) * (cH * 0.025);
+        } else {
+          mScale = 1.04 - progress * 0.04;
+          mDy = (0.5 - progress) * (cH * 0.025);
+        }
+
+        const animW = cW / mScale;
+        const animH = cH / mScale;
+        let animX = cX + (cW - animW) / 2 + mDx;
+        let animY = cY + (cH - animH) / 2 + mDy;
+
+        // クランプ（元画像の境界から外れない）
+        animX = Math.max(0, Math.min(img.width - animW, animX));
+        animY = Math.max(0, Math.min(img.height - animH, animY));
+
+        ctx.drawImage(img, animX, animY, animW, animH, 0, 0, cw, ch);
       } else {
-        baseW = cw;
-        baseH = cw / imgRatio;
+        // 静止画（クロスフェードのみ）: エディターで指定したクロップ領域を100%忠実に描画
+        ctx.drawImage(img, cX, cY, cW, cH, 0, 0, cw, ch);
       }
     } else {
       // 全体表示 (Contain)
       if (photoBg === 'blur') {
         this.drawContainBackdrop(ctx, img, cw, ch);
       }
-      // 余白枠 (92% safe frame)
       const paddingRatio = 0.92;
       const availW = cw * paddingRatio;
       const availH = ch * paddingRatio;
       const availRatio = availW / availH;
 
+      let baseW, baseH;
       if (imgRatio > availRatio) {
         baseW = availW;
         baseH = availW / imgRatio;
@@ -535,66 +566,23 @@ class SlideshowEngine {
         baseH = availH;
         baseW = availH * imgRatio;
       }
-    }
 
-    // Ken Burns subtle motion (smooth cinematic continuous velocity)
-    let motionZoom = 1.0;
-    let motionPanX = 0;
-    let motionPanY = 0;
+      const drawX = (cw - baseW) / 2;
+      const drawY = (ch - baseH) / 2;
 
-    if (motionMode === 'kenburns') {
-      const mode = item.photoIndex % 4;
-      if (mode === 0) {
-        // Slow Zoom In (1.00 -> 1.08) + pan right
-        motionZoom = 1.0 + (progress * 0.08);
-        motionPanX = (progress - 0.5) * 30;
-      } else if (mode === 1) {
-        // Slow Zoom Out (1.08 -> 1.00) + pan left
-        motionZoom = 1.08 - (progress * 0.08);
-        motionPanX = (0.5 - progress) * 30;
-      } else if (mode === 2) {
-        // Slow Zoom In (1.02 -> 1.09) + pan up
-        motionZoom = 1.02 + (progress * 0.07);
-        motionPanY = (progress - 0.5) * 22;
-      } else {
-        // Slow Zoom Out (1.07 -> 1.01) + pan down
-        motionZoom = 1.07 - (progress * 0.06);
-        motionPanY = (0.5 - progress) * 22;
-      }
-    }
-
-    // User adjustments
-    const userZoom = (slide.zoom ?? 100) / 100;
-    const totalZoom = userZoom * motionZoom;
-
-    const finalW = baseW * totalZoom;
-    const finalH = baseH * totalZoom;
-
-    const userPanX = ((slide.panX ?? 0) / 100) * (cw / 2);
-    const userPanY = ((slide.panY ?? 0) / 100) * (ch / 2);
-
-    const drawX = (cw - finalW) / 2 + userPanX + motionPanX;
-    const drawY = (ch - finalH) / 2 + userPanY + motionPanY;
-
-    if (motionMode === 'crossfade-only') {
       ctx.save();
       if (photoBg === 'blur') {
-        // ブラー背景時は立体的なシャドウと極細の上品なボーダーを付けて背景から際立たせる
         ctx.shadowColor = 'rgba(0, 0, 0, 0.65)';
         ctx.shadowBlur = 32;
         ctx.shadowOffsetY = 10;
-        ctx.drawImage(img, drawX, drawY, finalW, finalH);
-        // 薄いフレームボーダー
+        ctx.drawImage(img, drawX, drawY, baseW, baseH);
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
         ctx.lineWidth = 2;
-        ctx.strokeRect(drawX, drawY, finalW, finalH);
+        ctx.strokeRect(drawX, drawY, baseW, baseH);
       } else {
-        // 黒背景時はシンプルかつクリアに写真を中央配置で描画
-        ctx.drawImage(img, drawX, drawY, finalW, finalH);
+        ctx.drawImage(img, drawX, drawY, baseW, baseH);
       }
       ctx.restore();
-    } else {
-      ctx.drawImage(img, drawX, drawY, finalW, finalH);
     }
     ctx.filter = 'none';
 

@@ -356,9 +356,9 @@
         <div class="editor-layout">
           <!-- Canvas Preview -->
           <div class="editor-canvas-wrap" id="editorCanvasWrap">
-            <div class="editor-frame-badge">16:9 出力表示枠</div>
+            <div class="editor-frame-badge" id="editorFrameBadge">元画像と 16:9 トリム枠</div>
             <canvas id="editorCanvas" width="960" height="540"></canvas>
-            <div class="editor-tip">画像をドラッグして位置（トリム）を調整できます</div>
+            <div class="editor-tip">ドラッグしてトリム枠の位置を調整（元画像の枠からはみ出しません）</div>
           </div>
 
           <!-- Controls -->
@@ -375,10 +375,10 @@
             <!-- Zoom / Scale -->
             <div class="form-group">
               <div class="form-label">
-                <span>🔍 大きさ (Zoom / Scale)</span>
+                <span>🔍 大きさ (トリムズーム)</span>
                 <span class="range-val" id="editorZoomVal">100%</span>
               </div>
-              <input type="range" id="editorZoomSlider" class="form-range" min="50" max="250" step="1" value="100">
+              <input type="range" id="editorZoomSlider" class="form-range" min="100" max="300" step="1" value="100">
             </div>
 
             <!-- Fit Mode -->
