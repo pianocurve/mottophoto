@@ -236,6 +236,7 @@ class MottoPhotoApp {
           img: img,
           brightness: savedEdit?.brightness ?? 100,
           zoom: savedEdit?.zoom ?? 100,
+          cropRatio: savedEdit?.cropRatio ?? 'original',
           panX: savedEdit?.panX ?? 0,
           panY: savedEdit?.panY ?? 0,
           fit: savedEdit?.fit ?? defaultFit
@@ -654,8 +655,8 @@ class MottoPhotoApp {
     const motionMode = document.getElementById('selectEffectMotion')?.value ?? 'crossfade-only';
     const defaultFit = motionMode === 'crossfade-only' ? 'contain' : 'cover';
 
-    // 変更（明るさ・ズーム・トリム・フィット）があった画像のみをファイル名キーで抽出して保存
-    const photoEdits = {};
+    // 変更（明るさ・ズーム・トリム・フィット・比率）があった画像のみをファイル名キーで抽出して保存
+    const photoEdits = { ...(this.savedPhotoEdits || {}) };
     if (this.slides && this.slides.length > 0) {
       this.slides.forEach(s => {
         if (!s.name) return;
@@ -685,10 +686,11 @@ class MottoPhotoApp {
             panY,
             fit
           };
+        } else {
+          // デフォルト値に戻った場合はカスタム設定から除外
+          delete photoEdits[s.name];
         }
       });
-    } else if (this.savedPhotoEdits) {
-      Object.assign(photoEdits, this.savedPhotoEdits);
     }
 
     const slideOrder = this.slides && this.slides.length > 0
