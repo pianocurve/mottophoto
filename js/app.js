@@ -235,7 +235,10 @@ class MottoPhotoApp {
           url: url,
           img: img,
           brightness: savedEdit?.brightness ?? 100,
-          zoom: savedEdit?.zoom ?? 100,
+          contrast: savedEdit?.contrast ?? 100,
+          temperature: savedEdit?.temperature ?? 0,
+          tint: savedEdit?.tint ?? 0,
+          zoom: Math.max(100, Math.min(400, savedEdit?.zoom ?? 100)),
           cropRatio: savedEdit?.cropRatio ?? 'original',
           panX: savedEdit?.panX ?? 0,
           panY: savedEdit?.panY ?? 0,
@@ -503,7 +506,9 @@ class MottoPhotoApp {
     if (!slide) return;
     const thumbImg = document.getElementById(`thumb_${slide.id}`);
     if (thumbImg) {
-      thumbImg.style.filter = `brightness(${slide.brightness}%)`;
+      const b = slide.brightness ?? 100;
+      const c = slide.contrast ?? 100;
+      thumbImg.style.filter = `brightness(${b}%) contrast(${c}%)`;
     }
   }
 
@@ -661,6 +666,9 @@ class MottoPhotoApp {
       this.slides.forEach(s => {
         if (!s.name) return;
         const brightness = s.brightness ?? 100;
+        const contrast = s.contrast ?? 100;
+        const temperature = s.temperature ?? 0;
+        const tint = s.tint ?? 0;
         const zoom = s.zoom ?? 100;
         const panX = s.panX ?? 0;
         const panY = s.panY ?? 0;
@@ -670,6 +678,9 @@ class MottoPhotoApp {
         // デフォルト（初期値）から変更されているか判定
         const isModified = (
           brightness !== 100 ||
+          contrast !== 100 ||
+          temperature !== 0 ||
+          tint !== 0 ||
           zoom !== 100 ||
           panX !== 0 ||
           panY !== 0 ||
@@ -680,6 +691,9 @@ class MottoPhotoApp {
         if (isModified) {
           photoEdits[s.name] = {
             brightness,
+            contrast,
+            temperature,
+            tint,
             zoom,
             cropRatio,
             panX,
@@ -792,7 +806,10 @@ class MottoPhotoApp {
           const edit = this.savedPhotoEdits[slide.name];
           if (edit) {
             if (edit.brightness !== undefined) slide.brightness = edit.brightness;
-            if (edit.zoom !== undefined) slide.zoom = edit.zoom;
+            if (edit.contrast !== undefined) slide.contrast = edit.contrast;
+            if (edit.temperature !== undefined) slide.temperature = edit.temperature;
+            if (edit.tint !== undefined) slide.tint = edit.tint;
+            if (edit.zoom !== undefined) slide.zoom = Math.max(100, Math.min(400, edit.zoom));
             if (edit.cropRatio !== undefined) slide.cropRatio = edit.cropRatio;
             if (edit.panX !== undefined) slide.panX = edit.panX;
             if (edit.panY !== undefined) slide.panY = edit.panY;

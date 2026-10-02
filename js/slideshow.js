@@ -502,9 +502,10 @@ class SlideshowEngine {
     const motionMode = document.getElementById('selectEffectMotion')?.value ?? 'crossfade-only';
     const photoBg = document.getElementById('selectPhotoBg')?.value ?? 'black';
 
-    // Brightness filter
+    // Filters (Brightness & Contrast)
     const brightness = slide.brightness ?? 100;
-    ctx.filter = `brightness(${brightness}%)`;
+    const contrast = slide.contrast ?? 100;
+    ctx.filter = `brightness(${brightness}%) contrast(${contrast}%)`;
 
     const img = slide.img;
     const imgRatio = img.width / img.height;
@@ -575,6 +576,11 @@ class SlideshowEngine {
     ctx.clip();
 
     ctx.drawImage(img, dX, dY, dW, dH);
+    ctx.filter = 'none';
+
+    // ホワイトバランス（色温度・色かぶり補正）のブレンド
+    SlideEditor.applyColorGrading(ctx, b, slide.temperature ?? 0, slide.tint ?? 0);
+
     ctx.restore();
 
     // 枠のスタイリング（ブラー背景またはContain時の上品な枠線）

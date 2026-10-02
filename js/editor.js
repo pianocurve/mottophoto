@@ -20,6 +20,12 @@ class SlideEditor {
     // Controls
     this.brightnessSlider = document.getElementById('editorBrightnessSlider');
     this.brightnessVal = document.getElementById('editorBrightnessVal');
+    this.contrastSlider = document.getElementById('editorContrastSlider');
+    this.contrastVal = document.getElementById('editorContrastVal');
+    this.tempSlider = document.getElementById('editorTempSlider');
+    this.tempVal = document.getElementById('editorTempVal');
+    this.tintSlider = document.getElementById('editorTintSlider');
+    this.tintVal = document.getElementById('editorTintVal');
     this.zoomSlider = document.getElementById('editorZoomSlider');
     this.zoomVal = document.getElementById('editorZoomVal');
     this.panXSlider = document.getElementById('editorPanXSlider');
@@ -150,8 +156,8 @@ class SlideEditor {
       frameY = (ch - frameH) / 2;
     }
 
-    // ズーム（最低100% = 枠ぴったり。100%〜300%で枠の内側をズーム）
-    const scale = Math.max(1.0, Math.min(3.0, (zoom || 100) / 100));
+    // ズーム（最低100% = 枠ぴったり。100%〜400%で枠の内側をズーム）
+    const scale = Math.max(1.0, Math.min(4.0, (zoom || 100) / 100));
 
     // 枠に対する写真の描画サイズ
     // 枠の内側に隙間（空白）が出ないよう、枠を元画像で完全に覆う (Cover)
@@ -207,6 +213,35 @@ class SlideEditor {
     };
   }
 
+  /**
+   * Apply White Balance (Color Temperature & Tint) over the clipped photo frame
+   */
+  static applyColorGrading(ctx, frame, temp = 0, tint = 0) {
+    if (temp === 0 && tint === 0) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'soft-light';
+
+    // 色温度 (Temperature: 暖色 ↔ 寒色)
+    if (temp !== 0) {
+      const absTemp = Math.abs(temp) / 100;
+      const alpha = absTemp * 0.45;
+      // temp > 0: 暖色 (アンバー/オレンジ), temp < 0: 寒色 (クールスカイブルー)
+      ctx.fillStyle = temp > 0 ? `rgba(255, 140, 20, ${alpha})` : `rgba(30, 144, 255, ${alpha})`;
+      ctx.fillRect(frame.frameX, frame.frameY, frame.frameW, frame.frameH);
+    }
+
+    // 色かぶり (Tint: 緑 ↔ マゼンタ)
+    if (tint !== 0) {
+      const absTint = Math.abs(tint) / 100;
+      const alpha = absTint * 0.40;
+      // tint > 0: マゼンタ, tint < 0: グリーン
+      ctx.fillStyle = tint > 0 ? `rgba(255, 20, 147, ${alpha})` : `rgba(34, 197, 94, ${alpha})`;
+      ctx.fillRect(frame.frameX, frame.frameY, frame.frameW, frame.frameH);
+    }
+
+    ctx.restore();
+  }
+
   initEvents() {
     // Sliders
     this.brightnessSlider.addEventListener('input', (e) => {
@@ -215,8 +250,32 @@ class SlideEditor {
       this.render();
     });
 
+    if (this.contrastSlider) {
+      this.contrastSlider.addEventListener('input', (e) => {
+        this.tempState.contrast = parseInt(e.target.value, 10);
+        this.contrastVal.textContent = `${this.tempState.contrast}%`;
+        this.render();
+      });
+    }
+
+    if (this.tempSlider) {
+      this.tempSlider.addEventListener('input', (e) => {
+        this.tempState.temperature = parseInt(e.target.value, 10);
+        this.tempVal.textContent = this.formatTempLabel(this.tempState.temperature);
+        this.render();
+      });
+    }
+
+    if (this.tintSlider) {
+      this.tintSlider.addEventListener('input', (e) => {
+        this.tempState.tint = parseInt(e.target.value, 10);
+        this.tintVal.textContent = this.formatTintLabel(this.tempState.tint);
+        this.render();
+      });
+    }
+
     this.zoomSlider.addEventListener('input', (e) => {
-      this.tempState.zoom = Math.max(100, parseInt(e.target.value, 10));
+      this.tempState.zoom = Math.max(100, Math.min(400, parseInt(e.target.value, 10)));
       this.zoomVal.textContent = `${this.tempState.zoom}%`;
       this.render();
     });
@@ -305,6 +364,9 @@ class SlideEditor {
     // Reset button
     this.btnReset.addEventListener('click', () => {
       this.tempState.brightness = 100;
+      this.tempState.contrast = 100;
+      this.tempState.temperature = 0;
+      this.tempState.tint = 0;
       this.tempState.zoom = 100;
       this.tempState.cropRatio = 'original';
       this.tempState.panX = 0;
@@ -348,7 +410,10 @@ class SlideEditor {
 
     this.originalState = {
       brightness: slide.brightness ?? 100,
-      zoom: Math.max(100, slide.zoom ?? 100),
+      contrast: slide.contrast ?? 100,
+      temperature: slide.temperature ?? 0,
+      tint: slide.tint ?? 0,
+      zoom: Math.max(100, Math.min(400, slide.zoom ?? 100)),
       cropRatio: slide.cropRatio ?? 'original',
       fit: slide.fit ?? defaultFit,
       panX: slide.panX ?? 0,
@@ -372,9 +437,34 @@ class SlideEditor {
     });
   }
 
+  formatTempLabel(val) {
+    if (val === 0) return '±0';
+    return val > 0 ? `+${val} (暖色)` : `${val} (寒色)`;
+  }
+
+  formatTintLabel(val) {
+    if (val === 0) return '±0';
+    return val > 0 ? `+${val} (マゼンタ)` : `${val} (緑)`;
+  }
+
   updateControlUI() {
     this.brightnessSlider.value = this.tempState.brightness;
     this.brightnessVal.textContent = `${this.tempState.brightness}%`;
+
+    if (this.contrastSlider) {
+      this.contrastSlider.value = this.tempState.contrast ?? 100;
+      this.contrastVal.textContent = `${this.tempState.contrast ?? 100}%`;
+    }
+
+    if (this.tempSlider) {
+      this.tempSlider.value = this.tempState.temperature ?? 0;
+      this.tempVal.textContent = this.formatTempLabel(this.tempState.temperature ?? 0);
+    }
+
+    if (this.tintSlider) {
+      this.tintSlider.value = this.tempState.tint ?? 0;
+      this.tintVal.textContent = this.formatTintLabel(this.tempState.tint ?? 0);
+    }
 
     this.zoomSlider.value = this.tempState.zoom;
     this.zoomVal.textContent = `${this.tempState.zoom}%`;
@@ -454,9 +544,16 @@ class SlideEditor {
     ctx.rect(b.frameX, b.frameY, b.frameW, b.frameH);
     ctx.clip();
 
-    // 2. 枠の内側にズームした写真を描画（明るさフィルタ適用）
-    ctx.filter = `brightness(${this.tempState.brightness}%)`;
+    // 2. 枠の内側にズームした写真を描画（明るさ・コントラストフィルタ適用）
+    const brightness = this.tempState.brightness ?? 100;
+    const contrast = this.tempState.contrast ?? 100;
+    ctx.filter = `brightness(${brightness}%) contrast(${contrast}%)`;
     ctx.drawImage(img, b.drawX, b.drawY, b.drawW, b.drawH);
+    ctx.filter = 'none';
+
+    // 3. ホワイトバランス（色温度・色かぶり補正）のブレンド
+    SlideEditor.applyColorGrading(ctx, b, this.tempState.temperature ?? 0, this.tempState.tint ?? 0);
+
     ctx.restore();
 
     // 3. 元画像の枠線（写真本来の固定枠）を美しく表示
@@ -591,7 +688,7 @@ class SlideEditor {
   onWheel(e) {
     e.preventDefault();
     const delta = e.deltaY < 0 ? 5 : -5;
-    const newZoom = Math.max(100, Math.min(300, this.tempState.zoom + delta));
+    const newZoom = Math.max(100, Math.min(400, this.tempState.zoom + delta));
     if (newZoom !== this.tempState.zoom) {
       this.tempState.zoom = newZoom;
       this.zoomSlider.value = newZoom;
@@ -612,7 +709,10 @@ class SlideEditor {
     if (this.currentSlideIndex >= 0 && this.app.slides[this.currentSlideIndex]) {
       const slide = this.app.slides[this.currentSlideIndex];
       slide.brightness = this.tempState.brightness;
-      slide.zoom = Math.max(100, this.tempState.zoom);
+      slide.contrast = this.tempState.contrast ?? 100;
+      slide.temperature = this.tempState.temperature ?? 0;
+      slide.tint = this.tempState.tint ?? 0;
+      slide.zoom = Math.max(100, Math.min(400, this.tempState.zoom));
       slide.cropRatio = this.tempState.cropRatio || 'original';
       slide.fit = this.tempState.fit;
       slide.panX = this.tempState.panX;

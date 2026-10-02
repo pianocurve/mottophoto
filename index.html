@@ -372,13 +372,40 @@
               <input type="range" id="editorBrightnessSlider" class="form-range" min="20" max="200" step="1" value="100">
             </div>
 
-            <!-- Zoom / Scale -->
+            <!-- Contrast -->
+            <div class="form-group">
+              <div class="form-label">
+                <span>🌓 コントラスト (Contrast)</span>
+                <span class="range-val" id="editorContrastVal">100%</span>
+              </div>
+              <input type="range" id="editorContrastSlider" class="form-range" min="40" max="180" step="1" value="100">
+            </div>
+
+            <!-- White Balance: Color Temperature -->
+            <div class="form-group">
+              <div class="form-label">
+                <span>🌡️ 色温度 (暖色/寒色)</span>
+                <span class="range-val" id="editorTempVal">±0</span>
+              </div>
+              <input type="range" id="editorTempSlider" class="form-range" min="-100" max="100" step="1" value="0">
+            </div>
+
+            <!-- White Balance: Tint (Green / Magenta) -->
+            <div class="form-group">
+              <div class="form-label">
+                <span>🎨 色かぶり (緑/マゼンタ)</span>
+                <span class="range-val" id="editorTintVal">±0</span>
+              </div>
+              <input type="range" id="editorTintSlider" class="form-range" min="-100" max="100" step="1" value="0">
+            </div>
+
+            <!-- Zoom / Scale (up to 400%) -->
             <div class="form-group">
               <div class="form-label">
                 <span>🔍 枠内ズーム (Zoom)</span>
                 <span class="range-val" id="editorZoomVal">100%</span>
               </div>
-              <input type="range" id="editorZoomSlider" class="form-range" min="100" max="300" step="1" value="100">
+              <input type="range" id="editorZoomSlider" class="form-range" min="100" max="400" step="1" value="100">
             </div>
 
             <!-- Crop Aspect Ratio (Horizontal <-> Vertical Trimming) -->
