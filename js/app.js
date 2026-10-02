@@ -248,6 +248,7 @@ class MottoPhotoApp {
   handleBgmFile(file) {
     if (!file) return;
 
+    this.bgmFile = file;
     if (this.bgmUrl) {
       URL.revokeObjectURL(this.bgmUrl);
     }
@@ -280,6 +281,7 @@ class MottoPhotoApp {
 
   removeBgm() {
     this.bgmAudio.pause();
+    this.bgmFile = null;
     if (this.bgmUrl) {
       URL.revokeObjectURL(this.bgmUrl);
       this.bgmUrl = null;

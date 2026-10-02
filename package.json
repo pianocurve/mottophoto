@@ -6,7 +6,15 @@
   "scripts": {
     "start": "node server.js"
   },
-  "keywords": ["slideshow", "photo", "mp4", "video"],
+  "keywords": [
+    "slideshow",
+    "photo",
+    "mp4",
+    "video"
+  ],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "mp4-muxer": "^5.2.2"
+  }
 }
