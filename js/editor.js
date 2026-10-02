@@ -48,11 +48,53 @@ class SlideEditor {
     this.currentFrame = null;
 
     this.initEvents();
+
+    // Auto-fit canvas display size to fill container dynamically
+    if (window.ResizeObserver && this.canvas.parentElement) {
+      this.resizeObserver = new ResizeObserver(() => {
+        if (this.modal.classList.contains('open')) {
+          this.fitCanvasToContainer();
+          this.render();
+        }
+      });
+      this.resizeObserver.observe(this.canvas.parentElement);
+    }
+    window.addEventListener('resize', () => {
+      if (this.modal.classList.contains('open')) {
+        this.fitCanvasToContainer();
+        this.render();
+      }
+    });
+  }
+
+  /**
+   * Dynamically size the canvas element to maximize 16:9 bounds within .editor-canvas-wrap
+   */
+  fitCanvasToContainer() {
+    const wrap = this.canvas.parentElement;
+    if (!wrap) return;
+    const wrapW = wrap.clientWidth;
+    const wrapH = wrap.clientHeight;
+    if (wrapW <= 0 || wrapH <= 0) return;
+
+    const targetRatio = 16 / 9;
+    let targetW, targetH;
+
+    if (wrapW / wrapH > targetRatio) {
+      targetH = wrapH;
+      targetW = targetH * targetRatio;
+    } else {
+      targetW = wrapW;
+      targetH = targetW / targetRatio;
+    }
+
+    this.canvas.style.width = `${Math.floor(targetW)}px`;
+    this.canvas.style.height = `${Math.floor(targetH)}px`;
   }
 
   /**
    * Calculate the fixed photo frame and the inner zoomed/panned draw bounds.
-   * - Photo frame (frameX, frameY, frameW, frameH) maintains original aspect ratio and fixed screen size.
+   * - Photo frame (frameX, frameY, frameW, frameH) maintains original aspect ratio and maximum screen size.
    * - Zoom & Pan occur STRICTLY within this frame (clipped to frame bounds).
    */
   static getFrameAndDrawBounds(img, cw, ch, zoom = 100, panX = 0, panY = 0, fit = 'contain') {
@@ -70,17 +112,13 @@ class SlideEditor {
       frameW = cw;
       frameH = ch;
     } else {
-      // 16:9 スクリーン上に元画像本来の比率でポツンと配置される枠 (92% safe frame)
-      const paddingRatio = 0.90;
-      const availW = cw * paddingRatio;
-      const availH = ch * paddingRatio;
-
-      if (imgRatio > availW / availH) {
-        frameW = availW;
-        frameH = availW / imgRatio;
+      // 16:9 スクリーン上に元画像本来の比率で画面いっぱいまでフィットする最大枠 (100% full frame)
+      if (imgRatio > screenRatio) {
+        frameW = cw;
+        frameH = cw / imgRatio;
       } else {
-        frameH = availH;
-        frameW = availH * imgRatio;
+        frameH = ch;
+        frameW = ch * imgRatio;
       }
       frameX = (cw - frameW) / 2;
       frameY = (ch - frameH) / 2;
@@ -243,7 +281,12 @@ class SlideEditor {
     this.btnNext.disabled = slideIndex === this.app.slides.length - 1;
 
     this.modal.classList.add('open');
-    this.render();
+
+    // 次のレンダリングフレームでコンテナの表示サイズに合わせてキャンバスを画面最大化
+    requestAnimationFrame(() => {
+      this.fitCanvasToContainer();
+      this.render();
+    });
   }
 
   updateControlUI() {
@@ -412,14 +455,20 @@ class SlideEditor {
     let newPanX = this.panStartX;
     let newPanY = this.panStartY;
 
+    const rect = this.canvas.getBoundingClientRect();
+    const scaleX = rect.width > 0 ? this.canvas.width / rect.width : 1;
+    const scaleY = rect.height > 0 ? this.canvas.height / rect.height : 1;
+    const canvasDx = dx * scaleX;
+    const canvasDy = dy * scaleY;
+
     if (b.maxPanX > 0) {
-      const deltaPercent = (dx / b.maxPanX) * 100;
+      const deltaPercent = (canvasDx / b.maxPanX) * 100;
       newPanX = Math.round(this.panStartX + deltaPercent);
       newPanX = Math.max(-100, Math.min(100, newPanX));
     }
 
     if (b.maxPanY > 0) {
-      const deltaPercent = (dy / b.maxPanY) * 100;
+      const deltaPercent = (canvasDy / b.maxPanY) * 100;
       newPanY = Math.round(this.panStartY + deltaPercent);
       newPanY = Math.max(-100, Math.min(100, newPanY));
     }
