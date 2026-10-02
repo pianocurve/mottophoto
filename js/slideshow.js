@@ -406,12 +406,12 @@ class SlideshowEngine {
     ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
     ctx.shadowBlur = 24;
     ctx.shadowOffsetY = 4;
-    ctx.font = '700 78px "Noto Serif JP", "Yu Mincho", "Hiragino Mincho ProN", serif';
+    ctx.font = '700 78px "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", Georgia, serif';
     ctx.fillText(mainTitle, w / 2, h / 2 - 40);
 
     // Subtitle (明朝・セリフ体)
     if (subTitle) {
-      ctx.font = '500 36px "Noto Serif JP", "Yu Mincho", "Hiragino Mincho ProN", serif';
+      ctx.font = '500 36px "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", Georgia, serif';
       ctx.fillStyle = '#e2e8f0';
       ctx.shadowBlur = 16;
       ctx.fillText(subTitle, w / 2, h / 2 + 45);
@@ -419,7 +419,7 @@ class SlideshowEngine {
 
     // Date (白文字・明朝体)
     if (dateText) {
-      ctx.font = '500 24px "Noto Serif JP", "Yu Mincho", Georgia, serif';
+      ctx.font = '500 24px "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", Georgia, serif';
       ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
       ctx.shadowBlur = 12;
       ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
@@ -463,11 +463,11 @@ class SlideshowEngine {
     ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
     ctx.shadowBlur = 28;
     ctx.shadowOffsetY = 4;
-    ctx.font = 'italic 700 90px "Georgia", "Noto Serif JP", serif';
+    ctx.font = 'italic 700 90px "Georgia", "Hiragino Mincho ProN", "Yu Mincho", serif';
     ctx.fillText(finTitle, w / 2, h / 2 - 25);
 
     if (finSub) {
-      ctx.font = '400 30px Inter, "Noto Sans JP", sans-serif';
+      ctx.font = '400 30px -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif';
       ctx.fillStyle = '#cbd5e1';
       ctx.shadowBlur = 14;
       ctx.fillText(finSub, w / 2, h / 2 + 65);
@@ -636,7 +636,7 @@ class SlideshowEngine {
     ctx.textBaseline = 'bottom';
 
     // さりげない白抜き文字（セリフ体・明朝、文字の周囲にやわらかな影をつけて可読性を確保）
-    ctx.font = '500 32px "Noto Serif JP", "Yu Mincho", "Hiragino Mincho ProN", Georgia, serif';
+    ctx.font = '500 32px "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", Georgia, serif';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
     ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
     ctx.shadowBlur = 12;

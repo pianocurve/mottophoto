@@ -623,7 +623,7 @@ class MottoPhotoApp {
       ctx.textBaseline = 'middle';
       ctx.fillText(s.icon, 960, 460);
 
-      ctx.font = 'bold 54px Inter, "Noto Sans JP", sans-serif';
+      ctx.font = 'bold 54px -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif';
       ctx.fillStyle = '#ffffff';
       ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
       ctx.shadowBlur = 20;
