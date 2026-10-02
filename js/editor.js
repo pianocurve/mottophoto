@@ -368,6 +368,8 @@ class SlideEditor {
       this.app.updateSlideThumbnail(this.currentSlideIndex);
       // Redraw current view in main player if active
       this.app.slideshow.requestRenderCurrent();
+      // Auto-save settings including this slide's edit parameters
+      this.app.saveSettingsToLocalStorage();
     }
   }
 

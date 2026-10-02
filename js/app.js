@@ -8,6 +8,8 @@ class MottoPhotoApp {
     this.bgmAudio = document.getElementById('bgmAudioElement');
     this.bgmLoaded = false;
     this.draggedIndex = null;
+    this.savedPhotoEdits = {}; // Cached photo edits keyed by filename
+    this.savedSlideOrder = []; // Cached slide order by filename
 
     // Sub-systems
     this.slideshow = new SlideshowEngine(this);
@@ -181,6 +183,20 @@ class MottoPhotoApp {
       validFiles.map(file => this.createSlideFromFile(file))
     );
 
+    // If saved slide order is present, arrange newly loaded files accordingly
+    if (this.savedSlideOrder && this.savedSlideOrder.length > 0) {
+      const orderMap = new Map();
+      this.savedSlideOrder.forEach((name, idx) => orderMap.set(name, idx));
+      loadedSlideObjects.sort((a, b) => {
+        const orderA = orderMap.has(a.name) ? orderMap.get(a.name) : 999999;
+        const orderB = orderMap.has(b.name) ? orderMap.get(b.name) : 999999;
+        if (orderA === orderB) {
+          return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+        }
+        return orderA - orderB;
+      });
+    }
+
     this.slides.push(...loadedSlideObjects);
     this.onSlidesUpdated();
   }
@@ -210,17 +226,19 @@ class MottoPhotoApp {
       const url = URL.createObjectURL(file);
       const img = new Image();
       img.onload = () => {
+        const savedEdit = this.savedPhotoEdits?.[file.name];
+        const defaultFit = (document.getElementById('selectEffectMotion')?.value || 'crossfade-only') === 'crossfade-only' ? 'contain' : 'cover';
         resolve({
           id: 'slide_' + Math.random().toString(36).substr(2, 9),
           file: file,
           name: file.name,
           url: url,
           img: img,
-          brightness: 100,
-          zoom: 100,
-          panX: 0,
-          panY: 0,
-          fit: (document.getElementById('selectEffectMotion')?.value || 'crossfade-only') === 'crossfade-only' ? 'contain' : 'cover'
+          brightness: savedEdit?.brightness ?? 100,
+          zoom: savedEdit?.zoom ?? 100,
+          panX: savedEdit?.panX ?? 0,
+          panY: savedEdit?.panY ?? 0,
+          fit: savedEdit?.fit ?? defaultFit
         });
       };
       img.src = url;
@@ -314,6 +332,7 @@ class MottoPhotoApp {
     this.renderSequencer();
     this.slideshow.recalculateTimeline();
     this.slideshow.requestRenderCurrent();
+    this.saveSettingsToLocalStorage();
   }
 
   renderSequencer() {
@@ -626,7 +645,32 @@ class MottoPhotoApp {
   }
 
   getSettingsObject() {
+    // Collect per-photo edit parameters keyed by filename
+    const photoEdits = {};
+    if (this.slides && this.slides.length > 0) {
+      this.slides.forEach((s, idx) => {
+        if (s.name) {
+          photoEdits[s.name] = {
+            brightness: s.brightness ?? 100,
+            zoom: s.zoom ?? 100,
+            panX: s.panX ?? 0,
+            panY: s.panY ?? 0,
+            fit: s.fit ?? 'contain',
+            order: idx
+          };
+        }
+      });
+    } else if (this.savedPhotoEdits) {
+      Object.assign(photoEdits, this.savedPhotoEdits);
+    }
+
+    const slideOrder = this.slides && this.slides.length > 0
+      ? this.slides.map(s => s.name)
+      : (this.savedSlideOrder || []);
+
     return {
+      version: '1.2',
+      savedAt: new Date().toISOString(),
       mainTitle: document.getElementById('inputMainTitle')?.value ?? '思い出のフォトアルバム',
       subTitle: document.getElementById('inputSubTitle')?.value ?? '',
       dateText: document.getElementById('inputDateText')?.value ?? '',
@@ -638,7 +682,10 @@ class MottoPhotoApp {
       finDuration: parseFloat(document.getElementById('rangeFinDuration')?.value) || 5.0,
       effectMotion: document.getElementById('selectEffectMotion')?.value ?? 'crossfade-only',
       photoBg: document.getElementById('selectPhotoBg')?.value ?? 'black',
-      showCaption: document.getElementById('checkShowCaption')?.checked ?? true
+      showCaption: document.getElementById('checkShowCaption')?.checked ?? true,
+      bgmFileName: this.bgmLoaded ? (document.getElementById('audioFileName')?.textContent || '') : '',
+      slideOrder: slideOrder,
+      photoEdits: photoEdits
     };
   }
 
@@ -701,6 +748,43 @@ class MottoPhotoApp {
       if (el) el.checked = Boolean(settings.showCaption);
     }
 
+    // Cache photo edits & order
+    if (settings.photoEdits && typeof settings.photoEdits === 'object') {
+      this.savedPhotoEdits = { ...(this.savedPhotoEdits || {}), ...settings.photoEdits };
+    }
+    if (Array.isArray(settings.slideOrder)) {
+      this.savedSlideOrder = settings.slideOrder;
+    }
+
+    // If slides are currently loaded in memory, apply edits and reorder immediately
+    if (this.slides && this.slides.length > 0) {
+      if (this.savedPhotoEdits) {
+        this.slides.forEach(slide => {
+          const edit = this.savedPhotoEdits[slide.name];
+          if (edit) {
+            if (edit.brightness !== undefined) slide.brightness = edit.brightness;
+            if (edit.zoom !== undefined) slide.zoom = edit.zoom;
+            if (edit.panX !== undefined) slide.panX = edit.panX;
+            if (edit.panY !== undefined) slide.panY = edit.panY;
+            if (edit.fit !== undefined) slide.fit = edit.fit;
+          }
+        });
+      }
+
+      if (this.savedSlideOrder && this.savedSlideOrder.length > 0) {
+        const orderMap = new Map();
+        this.savedSlideOrder.forEach((name, idx) => orderMap.set(name, idx));
+        this.slides.sort((a, b) => {
+          const orderA = orderMap.has(a.name) ? orderMap.get(a.name) : 999999;
+          const orderB = orderMap.has(b.name) ? orderMap.get(b.name) : 999999;
+          return orderA - orderB;
+        });
+      }
+
+      this.renderSequencer();
+      this.slides.forEach((_, idx) => this.updateSlideThumbnail(idx));
+    }
+
     this.updateSpecialSlidePreviews();
     this.slideshow.recalculateTimeline();
     this.slideshow.requestRenderCurrent();
@@ -753,7 +837,15 @@ class MottoPhotoApp {
       try {
         const settings = JSON.parse(e.target.result);
         this.applySettings(settings, true);
-        alert('設定ファイルを読み込みました！');
+        const editCount = settings.photoEdits ? Object.keys(settings.photoEdits).length : 0;
+        let msg = '設定ファイルを正常に読み込みました！';
+        if (editCount > 0) {
+          msg += `\n（${editCount}枚の画像編集パラメータを適用・保持しました）`;
+        }
+        if (settings.bgmFileName) {
+          msg += `\n※設定されていたBGM: ${settings.bgmFileName}`;
+        }
+        alert(msg);
       } catch (err) {
         alert('設定ファイルの読み込みに失敗しました: ' + err.message);
       }
