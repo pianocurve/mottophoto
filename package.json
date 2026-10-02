@@ -1,0 +1,12 @@
+{
+  "name": "mottophoto",
+  "version": "1.0.0",
+  "description": "もっとフォト - 写真フォルダからBGM付きスライドショー動画(MP4)を作成するWebアプリ",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": ["slideshow", "photo", "mp4", "video"],
+  "author": "",
+  "license": "ISC"
+}

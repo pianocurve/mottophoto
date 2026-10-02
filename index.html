@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mottophoto (もっとフォト) - BGM付き写真スライドショー＆MP4作成</title>
+  <meta name="description" content="フォルダ内の写真からBGMにぴったり合わせた美麗なスライドショー動画(MP4)をブラウザだけで作成できるアプリ">
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;900&family=Noto+Serif+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- Hidden Inputs for Files -->
+  <input type="file" id="folderInput" class="visually-hidden" webkitdirectory directory multiple accept="image/*">
+  <input type="file" id="filesInput" class="visually-hidden" multiple accept="image/*">
+  <input type="file" id="bgmInput" class="visually-hidden" accept="audio/*">
+
+  <!-- Main Workspace (Player + Controls & Inspector Panel) -->
+  <main class="workspace-main">
+    
+    <!-- Left: Cinema Player Card -->
+    <div class="player-card">
+      <div class="canvas-viewport" id="viewport">
+        <canvas id="slideshowCanvas" width="1920" height="1080"></canvas>
+        
+        <!-- Empty Viewport Overlay -->
+        <div class="empty-viewport-overlay" id="emptyOverlay">
+          <div class="empty-icon">🖼️</div>
+          <div class="empty-title">写真フォルダを読み込んでスライドショーをはじめよう</div>
+          <p class="empty-desc">
+            フォルダを指定すると、中の写真が一気に読み込まれます。<br>
+            ドラッグ＆ドロップでフォルダや写真をここに直接放り込むこともできます。
+          </p>
+          <div class="empty-actions">
+            <button class="btn btn-primary" id="btnEmptySelectFolder">📁 フォルダを選択</button>
+            <button class="btn btn-secondary" id="btnEmptySelectFiles">➕ 画像ファイルを選択</button>
+            <button class="btn btn-secondary" id="btnEmptySample" style="border-color: rgba(99, 102, 241, 0.4); color: #c7d2fe;">🌟 サンプル写真で試す</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Player Controls Bar -->
+      <div class="player-controls-bar">
+        <!-- Timeline Scrubber -->
+        <div class="timeline-scrubber">
+          <div class="progress-track" id="progressTrack">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+          <div class="time-display" id="timeDisplay">00:00 / 00:00</div>
+        </div>
+
+        <!-- Controls Row -->
+        <div class="controls-row">
+          <!-- Left: Slide Navigation & Counter -->
+          <div class="controls-left">
+            <button class="btn-icon" id="btnPrevSlide" title="前のスライドへ">⏮</button>
+            <button class="btn-play-pause" id="btnPlayPause" title="再生 / 一時停止 (Space)">
+              <span id="playIcon">▶</span>
+            </button>
+            <button class="btn-icon" id="btnNextSlide" title="次のスライドへ">⏭</button>
+            <div class="slide-badge-indicator" id="slideBadgeIndicator">
+              スライド: <strong id="currentSlideNumber">-</strong> / <span id="totalSlideNumber">-</span>
+            </div>
+          </div>
+
+          <!-- Center: Playback Settings & Info -->
+          <div class="controls-center">
+            <span id="nowPlayingText" style="font-size:0.8rem; color:var(--text-muted);">準備完了</span>
+          </div>
+
+          <!-- Right: Volume & Fullscreen -->
+          <div class="controls-right">
+            <div class="volume-control">
+              <button class="btn-icon" id="btnMuteToggle" title="ミュート切替">🔊</button>
+              <input type="range" id="volumeSlider" class="volume-slider" min="0" max="1" step="0.05" value="0.8" title="音量">
+            </div>
+            <button class="btn-icon" id="btnFullscreen" title="フルスクリーン">⛶</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Integrated Settings & Operations Inspector -->
+    <aside class="inspector-card">
+      
+      <!-- Panel Top Header with Brand, Actions & Stats -->
+      <div class="panel-header">
+        <div class="panel-brand-row">
+          <div class="brand">
+            <div class="brand-icon">📸</div>
+            <div class="brand-text">
+              <h1>mottophoto</h1>
+              <span>もっとフォト</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="panel-action-btns">
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-secondary" style="flex:1; font-size:0.82rem; padding:8px 10px;" id="btnOpenFolder" title="フォルダ内の写真画像を一括読み込み">
+              📁 フォルダ選択
+            </button>
+            <button class="btn btn-secondary" style="flex:1; font-size:0.82rem; padding:8px 10px;" id="btnSelectBgm" title="BGM音楽ファイルを選択">
+              🎵 BGM設定
+            </button>
+          </div>
+          <button class="btn btn-primary" style="width:100%; font-size:0.88rem; padding:9px 12px; margin-top:6px;" id="btnExportMp4" disabled title="MP4動画として保存">
+            🎬 MP4で書き出し
+          </button>
+        </div>
+
+        <!-- Status Summary -->
+        <div class="panel-status-summary">
+          <div class="status-item">
+            <span>写真:</span>
+            <strong id="statPhotoCount">0枚</strong>
+          </div>
+          <div class="status-divider"></div>
+          <div class="status-item">
+            <span>BGM:</span>
+            <strong id="statBgmDuration">未設定</strong>
+          </div>
+          <div class="status-divider"></div>
+          <div class="status-item">
+            <span>動画長:</span>
+            <strong id="statTotalDuration">00:00</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab Navigation -->
+      <nav class="tab-nav">
+        <button class="tab-btn active" data-tab="tab-title-fin">
+          <span>✍️</span> タイトル&Fin
+        </button>
+        <button class="tab-btn" data-tab="tab-timing-bgm">
+          <span>⏱️</span> BGM&時間
+        </button>
+        <button class="tab-btn" data-tab="tab-organize">
+          <span>🗂️</span> 整理
+        </button>
+      </nav>
+
+      <!-- Scrollable Tab Content Area -->
+      <div class="tab-content">
+        <!-- Tab 1: Title & Fin Customization -->
+        <div class="tab-panel active" id="tab-title-fin">
+
+          <!-- JSON 設定 保存 & 読込 -->
+          <div style="display:flex; gap:8px; margin-bottom:2px;">
+            <button class="btn btn-secondary" style="flex:1; font-size:0.78rem; padding:7px 8px;" id="btnExportJsonConfig" title="現在の設定（タイトル・文字・秒数など）をJSONファイルとして保存">
+              💾 設定保存 (JSON)
+            </button>
+            <button class="btn btn-secondary" style="flex:1; font-size:0.78rem; padding:7px 8px;" id="btnImportJsonConfig" title="保存したJSON設定ファイルを読み込み">
+              📂 設定読込 (JSON)
+            </button>
+            <input type="file" id="jsonConfigInput" class="visually-hidden" accept=".json">
+          </div>
+          <div style="font-size:0.72rem; color:var(--text-sub); margin-bottom:8px;">
+            <span>※ 入力内容は自動でブラウザに保存されます</span>
+          </div>
+          
+          <!-- 1枚目タイトル設定 -->
+          <div style="font-weight:700; font-size:0.92rem; color:var(--accent-cyan); display:flex; align-items:center; gap:6px;">
+            <span>🎬</span> 1枚目：タイトル画面
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label" for="inputMainTitle">メインタイトル</label>
+            <input type="text" id="inputMainTitle" class="form-input" value="思い出のフォトアルバム" placeholder="例: 2026年 家族旅行">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="inputSubTitle">サブタイトル</label>
+            <input type="text" id="inputSubTitle" class="form-input" value="Summer Vacation in Okinawa" placeholder="例: Memory of Summer">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="inputDateText">日付・場所</label>
+            <input type="text" id="inputDateText" class="form-input" value="" placeholder="例: 2026.10.02 / Okinawa, Japan">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="selectTitleBg">背景スタイル</label>
+            <select id="selectTitleBg" class="form-select">
+              <option value="gradient-dark">シネマティック・ダーク</option>
+              <option value="gradient-violet">オーロラ・バイオレット</option>
+              <option value="gradient-sunset">サンセット・グロウ</option>
+              <option value="gradient-ocean">ディープ・オーシャン</option>
+              <option value="first-photo-blur">1枚目の写真（ブラー背景）</option>
+            </select>
+          </div>
+
+          <hr style="border:0; border-top:1px solid var(--border-light); margin: 6px 0;">
+
+          <!-- 最後のFin設定 -->
+          <div style="font-weight:700; font-size:0.92rem; color:var(--accent-secondary); display:flex; align-items:center; gap:6px;">
+            <span>🏁</span> 最後のスライド：Fin画面
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="inputFinTitle">終了メッセージ</label>
+            <input type="text" id="inputFinTitle" class="form-input" value="Fin" placeholder="例: Fin / The End / ありがとう">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="inputFinSub">サブテキスト</label>
+            <input type="text" id="inputFinSub" class="form-input" value="Thank you for watching" placeholder="例: See you next time">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="selectFinBg">背景スタイル</label>
+            <select id="selectFinBg" class="form-select">
+              <option value="gradient-dark">シネマティック・ダーク</option>
+              <option value="gradient-violet">オーロラ・バイオレット</option>
+              <option value="last-photo-blur">最後の写真（ブラー背景）</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Tab 2: BGM & Timing Customization -->
+        <div class="tab-panel" id="tab-timing-bgm">
+          
+          <div style="font-weight:700; font-size:0.92rem; color:var(--accent-primary); display:flex; align-items:center; gap:6px;">
+            <span>🎵</span> BGM音楽ファイル
+          </div>
+
+          <div class="audio-info-box" id="audioInfoBox">
+            <div class="audio-header">
+              <span class="audio-name" id="audioFileName">BGM未設定</span>
+              <span class="audio-duration-tag" id="audioDurationBadge">--:--</span>
+            </div>
+            <audio id="bgmAudioElement" class="audio-preview-player" controls style="display:none;"></audio>
+            <div style="display:flex; gap:8px; margin-top:4px;">
+              <button class="btn btn-secondary" style="flex:1; padding:6px 12px; font-size:0.8rem;" id="btnChangeBgm">
+                音楽ファイルを選択
+              </button>
+              <button class="btn btn-danger" style="display:none; padding:6px 12px; font-size:0.8rem;" id="btnRemoveBgm">
+                削除
+              </button>
+            </div>
+          </div>
+
+          <hr style="border:0; border-top:1px solid var(--border-light); margin: 6px 0;">
+
+          <div style="font-weight:700; font-size:0.92rem; color:var(--text-main); display:flex; align-items:center; gap:6px;">
+            <span>⏳</span> スライド切り替え時間の自動計算
+          </div>
+          <p style="font-size:0.78rem; color:var(--text-muted); line-height:1.4;">
+            BGMの長さに合わせて、写真の切り替え時間を自動計算します。<br>
+            最初（タイトル）と最後（Fin）を長めに設定し、残りを写真枚数で均等配分します。
+          </p>
+
+          <div class="form-group">
+            <div class="form-label">
+              <span>タイトル表示時間</span>
+              <span class="range-val" id="titleDurationLabel">5.0 秒</span>
+            </div>
+            <input type="range" id="rangeTitleDuration" class="form-range" min="2" max="10" step="0.5" value="5.0">
+          </div>
+
+          <div class="form-group">
+            <div class="form-label">
+              <span>Fin（終了）表示時間</span>
+              <span class="range-val" id="finDurationLabel">5.0 秒</span>
+            </div>
+            <input type="range" id="rangeFinDuration" class="form-range" min="2" max="10" step="0.5" value="5.0">
+          </div>
+
+          <div class="form-group">
+            <div class="form-label">
+              <span>写真1枚あたりの表示時間</span>
+              <span class="range-val" id="photoDurationLabel" style="color:var(--accent-primary);">3.0 秒</span>
+            </div>
+            <div style="font-size:0.75rem; color:var(--text-sub); display:flex; justify-content:space-between;">
+              <span id="timingBreakdownText">BGM未指定時は手動指定</span>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top:4px;">
+            <label class="form-label">エフェクト演出</label>
+            <select id="selectEffectMotion" class="form-select">
+              <option value="crossfade-only" selected>クロスフェードのみ（静止・余白収まり）</option>
+              <option value="kenburns">ケン・バーンズ（緩やかなズーム＆パン）</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="margin-top:4px;">
+            <label class="form-label">写真スライドの背景</label>
+            <select id="selectPhotoBg" class="form-select">
+              <option value="black" selected>シンプル・ブラック（黒背景）</option>
+              <option value="blur">アンビエント・ブラー（写真のぼかし背景）</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="margin-top:8px;">
+            <label style="display:flex; align-items:center; gap:8px; font-size:0.82rem; color:var(--text-muted); cursor:pointer;">
+              <input type="checkbox" id="checkShowCaption" checked style="accent-color:var(--accent-primary); width:16px; height:16px; cursor:pointer;">
+              <span>ファイル名からキャプション表示 (最初の _ まで)</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Tab 3: Organize / Actions -->
+        <div class="tab-panel" id="tab-organize">
+          <div style="font-weight:700; font-size:0.92rem; color:var(--text-main); display:flex; align-items:center; gap:6px;">
+            <span>🔀</span> 写真の並び替え & 整理
+          </div>
+          <p style="font-size:0.78rem; color:var(--text-muted); line-height:1.4;">
+            下のスライド一覧はドラッグ＆ドロップで自由に並び替えができます。以下のボタンで一括並び替えも可能です。
+          </p>
+
+          <div style="display:flex; flex-direction:column; gap:8px; margin-top:4px;">
+            <button class="btn btn-secondary" style="justify-content:flex-start; font-size:0.85rem; padding:10px 14px;" id="btnSortNameAsc" title="ファイル名昇順でソート">
+              🔤 ファイル名順に並び替え
+            </button>
+            <button class="btn btn-secondary" style="justify-content:flex-start; font-size:0.85rem; padding:10px 14px;" id="btnSortReverse" title="順番を逆順にする">
+              🔄 前後の並び順を反転
+            </button>
+            <button class="btn btn-danger" style="justify-content:flex-start; font-size:0.85rem; padding:10px 14px; margin-top:8px;" id="btnClearAllSlides" title="すべての写真をクリア">
+              🗑️ 読み込んだ写真をすべてクリア
+            </button>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Bottom Fixed Footer: Slide Sequencer Strip -->
+  <footer class="timeline-footer">
+    <div class="slides-strip-container">
+      <div class="slides-strip" id="slidesStrip">
+        <!-- Dynamically rendered slides -->
+        <div class="add-slide-card" id="btnAddMorePhotos">
+          <span class="add-icon">➕</span>
+          <span>写真を追加</span>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ==========================================================================
+       MODAL 1: Slide Image Editor (明るさ、大きさ、トリム)
+       ========================================================================== -->
+  <div class="modal-backdrop" id="editorModal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span>🎨</span>
+          <span id="editorSlideTitle">スライド画像編集</span>
+        </div>
+        <button class="btn-icon" id="btnCloseEditorModal" title="閉じる">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="editor-layout">
+          <!-- Canvas Preview -->
+          <div class="editor-canvas-wrap" id="editorCanvasWrap">
+            <canvas id="editorCanvas" width="960" height="540"></canvas>
+            <div class="editor-tip">画像をドラッグして位置（トリム）を調整できます</div>
+          </div>
+
+          <!-- Controls -->
+          <div class="editor-controls">
+            <!-- Brightness -->
+            <div class="form-group">
+              <div class="form-label">
+                <span>☀️ 明るさ (Brightness)</span>
+                <span class="range-val" id="editorBrightnessVal">100%</span>
+              </div>
+              <input type="range" id="editorBrightnessSlider" class="form-range" min="20" max="200" step="1" value="100">
+            </div>
+
+            <!-- Zoom / Scale -->
+            <div class="form-group">
+              <div class="form-label">
+                <span>🔍 大きさ (Zoom / Scale)</span>
+                <span class="range-val" id="editorZoomVal">100%</span>
+              </div>
+              <input type="range" id="editorZoomSlider" class="form-range" min="50" max="250" step="1" value="100">
+            </div>
+
+            <!-- Fit Mode -->
+            <div class="form-group">
+              <div class="form-label">表示フィット方式</div>
+              <div class="segmented-control">
+                <button type="button" class="segmented-btn active" data-fit="cover" id="btnFitCover">
+                  枠いっぱい (Cover)
+                </button>
+                <button type="button" class="segmented-btn" data-fit="contain" id="btnFitContain">
+                  全体表示 (Contain)
+                </button>
+              </div>
+            </div>
+
+            <!-- Pan Controls (Trim Fine-Tuning) -->
+            <div class="form-group">
+              <div class="form-label">
+                <span>↔ 横位置 (Pan X)</span>
+                <span class="range-val" id="editorPanXVal">0%</span>
+              </div>
+              <input type="range" id="editorPanXSlider" class="form-range" min="-100" max="100" step="1" value="0">
+            </div>
+
+            <div class="form-group">
+              <div class="form-label">
+                <span>↕ 縦位置 (Pan Y)</span>
+                <span class="range-val" id="editorPanYVal">0%</span>
+              </div>
+              <input type="range" id="editorPanYSlider" class="form-range" min="-100" max="100" step="1" value="0">
+            </div>
+
+            <button class="btn btn-secondary" style="font-size:0.82rem; margin-top:6px;" id="btnResetEditorValues">
+              ↺ 初期設定に戻す
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-secondary" id="btnEditorPrevSlide">◀ 前の写真</button>
+          <button class="btn btn-secondary" id="btnEditorNextSlide">次の写真 ▶</button>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-secondary" id="btnEditorCancel">キャンセル</button>
+          <button class="btn btn-primary" id="btnEditorApply">完了して保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       MODAL 2: MP4 Export Progress & Download
+       ========================================================================== -->
+  <div class="modal-backdrop" id="exportModal">
+    <div class="modal-dialog" style="max-width: 600px;">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span>🎬</span>
+          <span id="exportModalTitle">MP4動画を書き出し中...</span>
+        </div>
+        <button class="btn-icon" id="btnCloseExportModal" style="display:none;">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="export-progress-box" id="exportProgressBox">
+          <div class="export-percent-text" id="exportPercent">0%</div>
+          <div class="export-progress-bar-wrap">
+            <div class="export-progress-fill" id="exportProgressFill"></div>
+          </div>
+          <div class="export-status-label" id="exportStatusLabel">
+            フレームをレンダリングしています...
+          </div>
+          <div style="font-size:0.75rem; color:var(--text-sub);" id="exportTimeEstimate">
+            動画の再生時間に合わせて録画されます。しばらくお待ちください。
+          </div>
+        </div>
+
+        <!-- Video Preview when completed -->
+        <video id="exportVideoPreview" class="export-video-preview" controls></video>
+      </div>
+
+      <div class="modal-footer" style="justify-content: flex-end;">
+        <button class="btn btn-danger" id="btnCancelExport">録画を中止</button>
+        <button class="btn btn-success" id="btnDownloadExportedMp4" style="display:none;">
+          ⬇ MP4をダウンロード
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/editor.js"></script>
+  <script src="js/slideshow.js"></script>
+  <script src="js/recorder.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
