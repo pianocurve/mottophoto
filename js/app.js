@@ -340,7 +340,8 @@ class MottoPhotoApp {
     strip.innerHTML = '';
 
     // 1. Title Slide Card (Special)
-    const titleCard = this.createSpecialCard('title', '🎬 1枚目：タイトル', '思い出のフォトアルバム', () => {
+    const currentTitle = document.getElementById('inputMainTitle')?.value || '思い出のフォトアルバム';
+    const titleCard = this.createSpecialCard('title', '🎬 1枚目：タイトル', currentTitle, () => {
       this.switchTab('tab-title-fin');
       this.slideshow.seek(0);
     });
@@ -353,7 +354,8 @@ class MottoPhotoApp {
     });
 
     // 3. Fin Slide Card (Special)
-    const finCard = this.createSpecialCard('fin', '🏁 最終：Fin', 'Fin', () => {
+    const currentFin = document.getElementById('inputFinTitle')?.value || 'Fin';
+    const finCard = this.createSpecialCard('fin', '🏁 最終：Fin', currentFin, () => {
       this.switchTab('tab-title-fin');
       const finItem = this.slideshow.timeline.find(t => t.type === 'fin');
       if (finItem) this.slideshow.seek(finItem.startTime);
@@ -483,12 +485,14 @@ class MottoPhotoApp {
   }
 
   updateSpecialSlidePreviews() {
-    const titleText = document.getElementById('inputMainTitle').value || '思い出のフォトアルバム';
-    const finText = document.getElementById('inputFinTitle').value || 'Fin';
+    const mainTitleEl = document.getElementById('inputMainTitle');
+    const finTitleEl = document.getElementById('inputFinTitle');
+    const titleText = mainTitleEl ? mainTitleEl.value : '';
+    const finText = finTitleEl ? finTitleEl.value : '';
     const tEl = document.getElementById('special_card_title_title');
     const fEl = document.getElementById('special_card_fin_title');
-    if (tEl) tEl.textContent = titleText;
-    if (fEl) fEl.textContent = finText;
+    if (tEl) tEl.textContent = titleText || '（無題）';
+    if (fEl) fEl.textContent = finText || '（無題）';
   }
 
   updateSlideThumbnail(index) {

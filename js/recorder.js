@@ -220,9 +220,11 @@ class VideoExporter {
   triggerDownload() {
     if (!this.exportBlob || !this.exportUrl) return;
 
+    const mainTitle = document.getElementById('inputMainTitle')?.value?.trim();
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const timeStr = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
-    const filename = `mottophoto_${dateStr}_${timeStr}.mp4`;
+    const safeTitle = mainTitle ? mainTitle.replace(/[\\/:*?"<>|]/g, '_') : 'mottophoto';
+    const filename = `${safeTitle}_${dateStr}_${timeStr}.mp4`;
 
     const a = document.createElement('a');
     a.href = this.exportUrl;

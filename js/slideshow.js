@@ -377,10 +377,11 @@ class SlideshowEngine {
     const h = this.height;
     const progress = Math.max(0, Math.min(1, (time - item.startTime) / item.duration));
 
-    const mainTitle = document.getElementById('inputMainTitle').value || '思い出のフォトアルバム';
-    const subTitle = document.getElementById('inputSubTitle').value || '';
-    const dateText = document.getElementById('inputDateText').value || '';
-    const bgStyle = document.getElementById('selectTitleBg').value;
+    const mainTitleEl = document.getElementById('inputMainTitle');
+    const mainTitle = mainTitleEl ? mainTitleEl.value : '';
+    const subTitle = document.getElementById('inputSubTitle')?.value ?? '';
+    const dateText = document.getElementById('inputDateText')?.value ?? '';
+    const bgStyle = document.getElementById('selectTitleBg')?.value ?? 'gradient-dark';
 
     // Draw Background
     this.drawBackgroundStyle(ctx, bgStyle, this.app.slides[0]);
@@ -400,14 +401,16 @@ class SlideshowEngine {
     ctx.globalAlpha = textAlpha;
 
     // Main Title (明朝・セリフ体)
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#ffffff';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
-    ctx.shadowBlur = 24;
-    ctx.shadowOffsetY = 4;
-    ctx.font = '700 78px "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", Georgia, serif';
-    ctx.fillText(mainTitle, w / 2, h / 2 - 40);
+    if (mainTitle) {
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+      ctx.shadowBlur = 24;
+      ctx.shadowOffsetY = 4;
+      ctx.font = '700 78px "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", Georgia, serif';
+      ctx.fillText(mainTitle, w / 2, h / 2 - 40);
+    }
 
     // Subtitle (明朝・セリフ体)
     if (subTitle) {
@@ -433,9 +436,10 @@ class SlideshowEngine {
     const w = this.width;
     const h = this.height;
 
-    const finTitle = document.getElementById('inputFinTitle').value || 'Fin';
-    const finSub = document.getElementById('inputFinSub').value || '';
-    const bgStyle = document.getElementById('selectFinBg').value;
+    const finTitleEl = document.getElementById('inputFinTitle');
+    const finTitle = finTitleEl ? finTitleEl.value : '';
+    const finSub = document.getElementById('inputFinSub')?.value ?? '';
+    const bgStyle = document.getElementById('selectFinBg')?.value ?? 'gradient-dark';
 
     const lastSlide = this.app.slides.length > 0 ? this.app.slides[this.app.slides.length - 1] : null;
     this.drawBackgroundStyle(ctx, bgStyle, lastSlide);
@@ -457,14 +461,16 @@ class SlideshowEngine {
     const textAlpha = Math.min(1, Math.max(0, elapsed / (prevFade + 0.6)));
     ctx.globalAlpha = textAlpha;
 
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#ffffff';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
-    ctx.shadowBlur = 28;
-    ctx.shadowOffsetY = 4;
-    ctx.font = 'italic 700 90px "Georgia", "Hiragino Mincho ProN", "Yu Mincho", serif';
-    ctx.fillText(finTitle, w / 2, h / 2 - 25);
+    if (finTitle) {
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+      ctx.shadowBlur = 28;
+      ctx.shadowOffsetY = 4;
+      ctx.font = 'italic 700 90px "Georgia", "Hiragino Mincho ProN", "Yu Mincho", serif';
+      ctx.fillText(finTitle, w / 2, h / 2 - 25);
+    }
 
     if (finSub) {
       ctx.font = '400 30px -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif';
