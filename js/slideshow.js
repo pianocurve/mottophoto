@@ -15,6 +15,11 @@ class SlideshowEngine {
     this.canvas.width = this.width;
     this.canvas.height = this.height;
 
+    // Playback frame rate (24fps for cinematic look and low GPU overhead)
+    this.targetFps = 24;
+    this.frameInterval = 1000 / this.targetFps;
+    this.lastRenderTime = 0;
+
     // Timeline state
     this.currentTime = 0; // seconds
     this.totalDuration = 0; // seconds
@@ -205,6 +210,7 @@ class SlideshowEngine {
     this.isPlaying = true;
     this.playIcon.textContent = '⏸';
     this.lastFrameTimestamp = performance.now();
+    this.lastRenderTime = 0;
 
     // Sync Audio
     if (this.app.bgmAudio && this.app.bgmLoaded) {
@@ -270,8 +276,13 @@ class SlideshowEngine {
       return;
     }
 
-    this.updateProgressUI();
-    this.renderAtTime(this.currentTime);
+    // 24fps rendering throttle: only redraw canvas if frameInterval has elapsed
+    const elapsedSinceRender = now - this.lastRenderTime;
+    if (elapsedSinceRender >= this.frameInterval) {
+      this.lastRenderTime = now - (elapsedSinceRender % this.frameInterval);
+      this.updateProgressUI();
+      this.renderAtTime(this.currentTime);
+    }
 
     this.animationFrameId = requestAnimationFrame(() => this.tick());
   }
@@ -345,15 +356,23 @@ class SlideshowEngine {
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, w, h);
 
-    // Draw current slide
+    // Smooth cinematic dissolve curves (smoothstep)
+    const t = Math.max(0, Math.min(1, crossfadeRatio));
+    // S-curve for ultra-smooth transition without abrupt edge drop-offs
+    const smoothT = t * t * (3 - 2 * t);
+
+    // Draw current slide (fades out gracefully 1.0 -> 0.0 so edges never pop off when next slide is smaller)
     ctx.save();
+    if (nextItem && crossfadeRatio > 0) {
+      ctx.globalAlpha = Math.max(0, Math.min(1, 1 - smoothT));
+    }
     this.drawSlideItem(ctx, currentItem, time);
     ctx.restore();
 
-    // If crossfading, draw next slide with alpha blend
+    // If crossfading, draw next slide with alpha blend (fades in 0.0 -> 1.0)
     if (nextItem && crossfadeRatio > 0) {
       ctx.save();
-      ctx.globalAlpha = Math.max(0, Math.min(1, crossfadeRatio));
+      ctx.globalAlpha = Math.max(0, Math.min(1, smoothT));
       // Pass the actual current time so nextItem's Ken Burns motion is already smoothly running during crossfade
       this.drawSlideItem(ctx, nextItem, time);
       ctx.restore();
@@ -502,10 +521,14 @@ class SlideshowEngine {
     const motionMode = document.getElementById('selectEffectMotion')?.value ?? 'crossfade-only';
     const photoBg = document.getElementById('selectPhotoBg')?.value ?? 'black';
 
-    // Filters (Brightness & Contrast)
+    // Filters (Brightness & Contrast): bypass if default to maximize rendering speed
     const brightness = slide.brightness ?? 100;
     const contrast = slide.contrast ?? 100;
-    ctx.filter = `brightness(${brightness}%) contrast(${contrast}%)`;
+    if (brightness !== 100 || contrast !== 100) {
+      ctx.filter = `brightness(${brightness}%) contrast(${contrast}%)`;
+    } else {
+      ctx.filter = 'none';
+    }
 
     const img = slide.img;
     const imgRatio = img.width / img.height;
@@ -514,7 +537,7 @@ class SlideshowEngine {
     const fit = slide.fit ?? (motionMode === 'crossfade-only' ? 'contain' : 'cover');
 
     if (fit === 'contain' && photoBg === 'blur') {
-      this.drawContainBackdrop(ctx, img, cw, ch);
+      this.drawContainBackdrop(ctx, slide, cw, ch);
     }
 
     const b = SlideEditor.getFrameAndDrawBounds(
@@ -644,10 +667,22 @@ class SlideshowEngine {
     ctx.restore();
   }
 
-  drawContainBackdrop(ctx, img, cw, ch) {
+  drawContainBackdrop(ctx, slide, cw, ch) {
+    if (!slide || !slide.img) return;
+    if (!slide._blurCanvas) {
+      // Create a small offscreen canvas (e.g. 320x180) to blur cheaply and cache
+      const bw = 320;
+      const bh = 180;
+      const bCanvas = document.createElement('canvas');
+      bCanvas.width = bw;
+      bCanvas.height = bh;
+      const bCtx = bCanvas.getContext('2d');
+      bCtx.filter = 'blur(10px) brightness(40%)';
+      bCtx.drawImage(slide.img, -10, -10, bw + 20, bh + 20);
+      slide._blurCanvas = bCanvas;
+    }
     ctx.save();
-    ctx.filter = 'blur(30px) brightness(40%)';
-    ctx.drawImage(img, -20, -20, cw + 40, ch + 40);
+    ctx.drawImage(slide._blurCanvas, -20, -20, cw + 40, ch + 40);
     ctx.restore();
   }
 
@@ -656,9 +691,19 @@ class SlideshowEngine {
     const h = this.height;
 
     if (style.includes('blur') && fallbackSlide && fallbackSlide.img) {
+      if (!fallbackSlide._titleBlurCanvas) {
+        const bw = 320;
+        const bh = 180;
+        const bCanvas = document.createElement('canvas');
+        bCanvas.width = bw;
+        bCanvas.height = bh;
+        const bCtx = bCanvas.getContext('2d');
+        bCtx.filter = 'blur(12px) brightness(45%) saturate(1.2)';
+        bCtx.drawImage(fallbackSlide.img, -15, -15, bw + 30, bh + 30);
+        fallbackSlide._titleBlurCanvas = bCanvas;
+      }
       ctx.save();
-      ctx.filter = 'blur(40px) brightness(45%) saturate(1.2)';
-      ctx.drawImage(fallbackSlide.img, -40, -40, w + 80, h + 80);
+      ctx.drawImage(fallbackSlide._titleBlurCanvas, -40, -40, w + 80, h + 80);
       ctx.restore();
       return;
     }
